@@ -75,9 +75,8 @@ async def confirm_payment(
     new_pot_balance = await db.add_to_pot(session["ante_sats"])
     logger.info(f"Added {session['ante_sats']} sats to pot. New balance: {new_pot_balance}")
 
-    # Create Linux user for SSH access (skip in mock mode or if requested)
-    should_skip_user = skip_user_creation or settings.mock_lightning
-    if not should_skip_user:
+    # Create Linux user for SSH access (only skip if explicitly requested)
+    if not skip_user_creation:
         try:
             user_manager = UserManager()
             await user_manager.create_user(session["username"], session["password"])
