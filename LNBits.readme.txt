@@ -1,0 +1,140 @@
+LNBits Setup Guide for Orange Nethack
+======================================
+
+WHAT IS LNBITS?
+---------------
+LNbits is a lightweight accounts system for Lightning Network. Think of it as
+a "Lightning wallet as a service" that sits on top of a Lightning node.
+
+Key concepts:
+- It's CUSTODIAL - LNbits holds your sats, you trust the server operator
+- It provides a simple REST API for creating invoices and sending payments
+- You get API keys to authenticate requests
+- Perfect for apps that need to accept/send Lightning payments without
+  running your own node
+
+HOW IT WORKS
+------------
+1. You create a wallet on an LNbits instance (hosted or self-hosted)
+2. You get two API keys:
+   - Invoice/Read Key: Can create invoices and check balances (read-only for payments)
+   - Admin Key: Can also SEND payments (needed for payouts)
+3. Your app calls the LNbits API to:
+   - Create invoices (POST /api/v1/payments with out=false)
+   - Check if invoices are paid (GET /api/v1/payments/{hash})
+   - Send payments (POST /api/v1/payments with out=true)
+
+API FLOW FOR ORANGE NETHACK
+---------------------------
+1. Player requests game → App creates invoice via LNbits API
+2. Player pays invoice with their Lightning wallet
+3. LNbits sends webhook to /api/webhook/payment when paid
+4. App activates player session, adds ante to pot
+5. If player ascends → App sends pot to player's Lightning address via LNbits
+
+WHAT YOU NEED TO DO
+-------------------
+
+OPTION A: Use a Public LNbits Instance (Easiest)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1. Go to https://legend.lnbits.com (or another public instance)
+2. Create a new wallet (bookmark the URL - it contains your wallet ID!)
+3. Fund your wallet with some sats (you need balance for payouts)
+4. Click on "API Info" in the right sidebar
+5. Copy your keys:
+   - "Invoice/read key" → LNBITS_API_KEY in .env
+   - "Admin key" → LNBITS_ADMIN_KEY in .env
+
+WARNING: Public instances can disappear. Don't keep large amounts there.
+
+OPTION B: Self-Host LNbits (Recommended for Production)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1. You need a Lightning node (LND, CLN, etc.) or use a funding source
+2. Install LNbits: https://github.com/lnbits/lnbits
+3. Configure it to connect to your node
+4. Create a wallet and get your API keys
+5. Update .env with your self-hosted URL and keys
+
+OPTION C: Use LNbits on Voltage, Umbrel, Start9, etc.
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Many node packages include LNbits. Check your node's app store.
+
+
+CONFIGURE YOUR .ENV FILE
+------------------------
+Edit /Users/blusskin/orange-nethack/.env:
+
+    LNBITS_URL=https://legend.lnbits.com   # Or your self-hosted URL
+    LNBITS_API_KEY=your_invoice_read_key_here
+    LNBITS_ADMIN_KEY=your_admin_key_here
+
+The admin key is required for sending payouts to winners.
+
+
+TESTING YOUR SETUP
+------------------
+1. Start the server:
+   source .venv/bin/activate
+   python -m orange_nethack.api.main
+
+2. Create a test invoice:
+   curl -X POST http://localhost:8000/api/play \
+     -H "Content-Type: application/json" \
+     -d '{"lightning_address": "your@address.com"}'
+
+3. If successful, you'll get a payment_request (BOLT11 invoice)
+
+4. Pay it with any Lightning wallet to test the full flow
+
+
+FUNDING REQUIREMENTS
+--------------------
+Your LNbits wallet needs enough balance to pay out the pot when someone
+ascends. Make sure you:
+
+1. Fund your wallet with more sats than POT_INITIAL (default 10000)
+2. Monitor your balance: GET https://your-lnbits/api/v1/wallet
+3. Keep reserves for payouts as the pot grows
+
+
+WEBHOOK SETUP (IMPORTANT)
+-------------------------
+LNbits needs to reach your server to notify about payments.
+
+For local testing:
+- Use ngrok or similar: ngrok http 8000
+- Update your server's base URL or test manually
+
+For production:
+- Your server must be publicly accessible
+- LNbits will POST to: https://your-domain.com/api/webhook/payment
+
+
+LIGHTNING ADDRESSES FOR PAYOUTS
+-------------------------------
+Players provide a Lightning Address (like email for Lightning):
+- Format: user@domain.com
+- Examples: satoshi@getalby.com, user@walletofsatoshi.com
+
+When a player ascends, the app pays out to their Lightning address using
+LNbits' LNURL-pay endpoint.
+
+
+QUICK CHECKLIST
+---------------
+[ ] Create LNbits wallet
+[ ] Copy Invoice/Read key to .env as LNBITS_API_KEY
+[ ] Copy Admin key to .env as LNBITS_ADMIN_KEY
+[ ] Fund your wallet (enough for pot payouts)
+[ ] Ensure your server is reachable for webhooks
+[ ] Test creating an invoice via the API
+[ ] Test paying the invoice
+[ ] Verify the webhook is received
+
+
+RESOURCES
+---------
+- LNbits Docs: https://docs.lnbits.org/
+- LNbits API: https://demo.lnbits.org/docs
+- Lightning Address: https://lightningaddress.com/
+- Public Instances: https://github.com/lnbits/lnbits#lnbits-as-a-service

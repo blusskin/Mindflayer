@@ -1,0 +1,24 @@
+[Unit]
+Description=Orange Nethack API Server
+After=network.target
+
+[Service]
+Type=simple
+User=orange-nethack
+Group=orange-nethack
+WorkingDirectory=/opt/orange-nethack
+Environment=PATH=/opt/orange-nethack/.venv/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/opt/orange-nethack/.env
+ExecStart=/opt/orange-nethack/.venv/bin/orange-nethack-api
+Restart=always
+RestartSec=5
+
+# Security hardening
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/orange-nethack
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

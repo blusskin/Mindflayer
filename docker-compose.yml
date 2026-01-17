@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  orange-nethack:
+    build: .
+    ports:
+      - "8000:8000"   # API
+      - "2222:22"     # SSH (using 2222 to avoid conflicts)
+    volumes:
+      # Persist database between restarts
+      - orange-nethack-data:/var/lib/orange-nethack
+      # Persist game logs
+      - orange-nethack-games:/var/games/nethack
+    environment:
+      - MOCK_LIGHTNING=true
+    restart: unless-stopped
+
+volumes:
+  orange-nethack-data:
+  orange-nethack-games:

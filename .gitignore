@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.vscode/
+.idea/
+
+# Local config
+.env
+.env.local
+
+# Database
+*.sqlite
+
+# Test artifacts
+test_xlogfile
+
+# Ruff
+.ruff_cache/

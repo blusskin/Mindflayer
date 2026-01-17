@@ -1,0 +1,515 @@
+"""CLI tools for local testing of Orange Nethack.
+
+Commands:
+    simulate-payment: Manually trigger payment confirmation for a session
+    simulate-game: Append a fake xlogfile entry and process it
+    test-flow: Run a complete automated test
+    show-sessions: List active sessions
+    show-pot: Show current pot balance
+"""
+import argparse
+import asyncio
+import logging
+import secrets
+import sys
+import time
+from datetime import datetime
+from pathlib import Path
+
+from orange_nethack.api.webhooks import confirm_payment
+from orange_nethack.config import get_settings
+from orange_nethack.database import Database, get_db, init_db
+from orange_nethack.game.monitor import GameMonitor
+from orange_nethack.game.xlogfile import XlogfileWatcher
+from orange_nethack.lightning.lnbits import get_lnbits_client
+from orange_nethack.models import XlogEntry
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+def get_test_xlogfile_path() -> Path:
+    """Get path to test xlogfile (local or configured)."""
+    settings = get_settings()
+    # In mock mode, use a local test file
+    if settings.mock_lightning:
+        test_path = Path("./test_xlogfile")
+        return test_path
+    return settings.xlogfile_path
+
+
+def format_xlog_entry(
+    name: str,
+    death: str = "killed by a goblin",
+    score: int = 100,
+    turns: int = 50,
+    role: str = "Val",
+    race: str = "Hum",
+    gender: str = "Fem",
+    align: str = "Neu",
+) -> str:
+    """Format an xlogfile entry line."""
+    now = int(time.time())
+    date = datetime.now().strftime("%Y%m%d")
+
+    fields = [
+        f"version=3.6.6",
+        f"points={score}",
+        f"deathdnum=0",
+        f"deathlev=1",
+        f"maxlvl=1",
+        f"hp=-1",
+        f"maxhp=12",
+        f"deaths=1",
+        f"deathdate={date}",
+        f"birthdate={date}",
+        f"uid=1000",
+        f"role={role}",
+        f"race={race}",
+        f"gender={gender}",
+        f"align={align}",
+        f"name={name}",
+        f"death={death}",
+        f"conduct=0x0",
+        f"turns={turns}",
+        f"achieve=0x0",
+        f"realtime={turns * 2}",
+        f"starttime={now - turns * 2}",
+        f"endtime={now}",
+        f"gender0={gender}",
+        f"align0={align}",
+        f"flags=0x0",
+    ]
+    return "\t".join(fields) + "\n"
+
+
+async def cmd_simulate_payment(session_id: int) -> int:
+    """Simulate payment confirmation for a session."""
+    await init_db()
+
+    print(f"Simulating payment for session {session_id}...")
+
+    result = await confirm_payment(session_id=session_id, skip_user_creation=True)
+
+    if not result.success:
+        print(f"Error: {result.error}")
+        return 1
+
+    if result.already_processed:
+        print(f"Session {session_id} was already processed")
+        return 0
+
+    print(f"Payment confirmed!")
+    print(f"  Session ID: {result.session_id}")
+    print(f"  Username: {result.username}")
+    print(f"  Pot Balance: {result.pot_balance} sats")
+    return 0
+
+
+async def cmd_simulate_game(
+    username: str,
+    ascend: bool = False,
+    score: int = 100,
+    death: str | None = None,
+) -> int:
+    """Simulate a game completion by appending to xlogfile."""
+    await init_db()
+    db = get_db()
+
+    # Determine death message
+    if ascend:
+        death_msg = "ascended to demigod-hood"
+        if score < 1000:
+            score = 50000  # Reasonable ascension score
+    else:
+        death_msg = death or "killed by a goblin"
+
+    print(f"Simulating game for {username}...")
+    print(f"  Death: {death_msg}")
+    print(f"  Score: {score}")
+    print(f"  Ascended: {ascend}")
+
+    # Check if user has an active session
+    session = await db.get_session_by_username(username)
+    if not session:
+        print(f"Warning: No session found for username {username}")
+        print("Creating xlogfile entry anyway...")
+    elif session["status"] not in ("active", "playing"):
+        print(f"Warning: Session status is '{session['status']}', not active/playing")
+
+    # Get xlogfile path
+    xlogfile_path = get_test_xlogfile_path()
+    print(f"  Xlogfile: {xlogfile_path}")
+
+    # Create xlogfile entry
+    entry = format_xlog_entry(
+        name=username,
+        death=death_msg,
+        score=score,
+    )
+
+    # Append to xlogfile
+    xlogfile_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(xlogfile_path, "a") as f:
+        f.write(entry)
+
+    print(f"Xlogfile entry appended.")
+
+    # Process the entry with GameMonitor
+    print("Processing game end...")
+
+    # Create a monitor and process the entry directly
+    monitor = GameMonitor()
+    # Override xlogfile path for testing
+    monitor.watcher = XlogfileWatcher(xlogfile_path)
+    # Reset position to before our entry
+    file_size = xlogfile_path.stat().st_size
+    monitor.watcher.position = max(0, file_size - len(entry) - 10)
+
+    # Process new entries
+    entries = monitor.watcher.get_new_entries()
+    for e in entries:
+        if e.name == username:
+            await monitor._handle_game_end(e)
+            print("Game processed!")
+            break
+
+    # Show results
+    if session:
+        updated_session = await db.get_session(session["id"])
+        if updated_session:
+            print(f"  Session status: {updated_session['status']}")
+
+    pot_balance = await db.get_pot_balance()
+    print(f"  Pot balance: {pot_balance} sats")
+
+    return 0
+
+
+async def cmd_test_flow() -> int:
+    """Run a complete automated test flow."""
+    await init_db()
+    db = get_db()
+    settings = get_settings()
+    lnbits = get_lnbits_client()
+
+    print("=" * 60)
+    print("Orange Nethack - Full Test Flow")
+    print("=" * 60)
+    print(f"Mock Lightning: {settings.mock_lightning}")
+    print()
+
+    # Step 1: Check initial state
+    print("Step 1: Initial state")
+    initial_pot = await db.get_pot_balance()
+    print(f"  Initial pot balance: {initial_pot} sats")
+    print()
+
+    # Step 2: Create a session (simulating API call)
+    print("Step 2: Creating session...")
+    from orange_nethack.api.routes import generate_username, generate_password
+
+    username = generate_username()
+    password = generate_password()
+
+    invoice = await lnbits.create_invoice(
+        amount_sats=settings.ante_sats,
+        memo=f"Test - {username}",
+    )
+
+    session_id = await db.create_session(
+        username=username,
+        password=password,
+        payment_hash=invoice.payment_hash,
+        ante_sats=settings.ante_sats,
+    )
+
+    # Set a test lightning address
+    await db.set_lightning_address(session_id, "test@getalby.com")
+
+    print(f"  Session ID: {session_id}")
+    print(f"  Username: {username}")
+    print(f"  Payment hash: {invoice.payment_hash[:16]}...")
+    print()
+
+    # Step 3: Simulate payment
+    print("Step 3: Simulating payment...")
+    result = await confirm_payment(session_id=session_id, skip_user_creation=True)
+    if not result.success:
+        print(f"  Error: {result.error}")
+        return 1
+    print(f"  Payment confirmed!")
+    print(f"  Pot balance: {result.pot_balance} sats")
+    print()
+
+    # Step 4: Verify session is active
+    print("Step 4: Verifying session status...")
+    session = await db.get_session(session_id)
+    print(f"  Status: {session['status']}")
+    if session["status"] != "active":
+        print("  Error: Session should be active!")
+        return 1
+    print()
+
+    # Step 5: Simulate a game (death, not ascension)
+    print("Step 5: Simulating game (death)...")
+    xlogfile_path = get_test_xlogfile_path()
+
+    entry = format_xlog_entry(
+        name=username,
+        death="killed by a test goblin",
+        score=1234,
+    )
+    xlogfile_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(xlogfile_path, "a") as f:
+        f.write(entry)
+
+    # Process with monitor
+    monitor = GameMonitor()
+    monitor.watcher = XlogfileWatcher(xlogfile_path)
+    file_size = xlogfile_path.stat().st_size
+    monitor.watcher.position = max(0, file_size - len(entry) - 10)
+
+    entries = monitor.watcher.get_new_entries()
+    for e in entries:
+        if e.name == username:
+            await monitor._handle_game_end(e)
+            break
+
+    # Verify session ended
+    session = await db.get_session(session_id)
+    print(f"  Session status: {session['status']}")
+    if session["status"] != "ended":
+        print("  Error: Session should be ended!")
+        return 1
+
+    # Check game was recorded
+    games = await db.get_recent_games(limit=1)
+    if games and games[0]["username"] == username:
+        print(f"  Game recorded: score={games[0]['score']}, death='{games[0]['death_reason']}'")
+    print()
+
+    # Step 6: Check pot wasn't drained (no ascension)
+    print("Step 6: Checking pot balance...")
+    pot_after_death = await db.get_pot_balance()
+    print(f"  Pot balance: {pot_after_death} sats")
+    expected = initial_pot + settings.ante_sats
+    if pot_after_death != expected:
+        print(f"  Warning: Expected {expected} sats")
+    print()
+
+    # Step 7: Test ascension flow
+    print("Step 7: Testing ascension flow...")
+
+    # Create another session
+    username2 = generate_username()
+    password2 = generate_password()
+
+    invoice2 = await lnbits.create_invoice(
+        amount_sats=settings.ante_sats,
+        memo=f"Test ascension - {username2}",
+    )
+
+    session_id2 = await db.create_session(
+        username=username2,
+        password=password2,
+        payment_hash=invoice2.payment_hash,
+        ante_sats=settings.ante_sats,
+    )
+    await db.set_lightning_address(session_id2, "winner@getalby.com")
+
+    # Confirm payment
+    result2 = await confirm_payment(session_id=session_id2, skip_user_creation=True)
+    print(f"  New session: {session_id2} ({username2})")
+    print(f"  Pot before ascension: {result2.pot_balance} sats")
+
+    # Simulate ascension
+    entry2 = format_xlog_entry(
+        name=username2,
+        death="ascended to demigod-hood",
+        score=999999,
+    )
+    with open(xlogfile_path, "a") as f:
+        f.write(entry2)
+
+    # Process
+    monitor.watcher.position = xlogfile_path.stat().st_size - len(entry2) - 10
+    entries = monitor.watcher.get_new_entries()
+    for e in entries:
+        if e.name == username2:
+            await monitor._handle_game_end(e)
+            break
+
+    # Verify ascension was recorded
+    games = await db.get_recent_games(limit=1)
+    if games and games[0]["username"] == username2:
+        print(f"  Game recorded: score={games[0]['score']}, ascended={games[0]['ascended']}")
+        if games[0]["payout_sats"]:
+            print(f"  Payout: {games[0]['payout_sats']} sats")
+
+    pot_after_ascension = await db.get_pot_balance()
+    print(f"  Pot after ascension: {pot_after_ascension} sats")
+    print()
+
+    # Summary
+    print("=" * 60)
+    print("Test Flow Complete!")
+    print("=" * 60)
+
+    # Show final stats
+    stats = await db.get_stats()
+    print(f"Total games: {stats.get('total_games', 0)}")
+    print(f"Total ascensions: {stats.get('total_ascensions', 0)}")
+    print(f"High score: {stats.get('high_score', 0)}")
+    print()
+
+    return 0
+
+
+async def cmd_show_sessions() -> int:
+    """Show all active sessions."""
+    await init_db()
+    db = get_db()
+
+    sessions = await db.get_active_sessions()
+
+    if not sessions:
+        print("No active sessions.")
+        return 0
+
+    print(f"Active sessions ({len(sessions)}):")
+    print("-" * 80)
+    print(f"{'ID':<6} {'Username':<16} {'Status':<10} {'Ante':<8} {'Created':<20}")
+    print("-" * 80)
+
+    for s in sessions:
+        print(
+            f"{s['id']:<6} {s['username']:<16} {s['status']:<10} "
+            f"{s['ante_sats']:<8} {s['created_at'][:19]}"
+        )
+
+    return 0
+
+
+async def cmd_show_pot() -> int:
+    """Show current pot balance."""
+    await init_db()
+    db = get_db()
+    settings = get_settings()
+
+    balance = await db.get_pot_balance()
+
+    print(f"Pot Balance: {balance:,} sats")
+    print(f"Ante: {settings.ante_sats:,} sats")
+
+    return 0
+
+
+async def cmd_show_games(limit: int = 10) -> int:
+    """Show recent games."""
+    await init_db()
+    db = get_db()
+
+    games = await db.get_recent_games(limit=limit)
+
+    if not games:
+        print("No games recorded yet.")
+        return 0
+
+    print(f"Recent games ({len(games)}):")
+    print("-" * 100)
+    print(f"{'ID':<6} {'Username':<16} {'Score':<10} {'Ascended':<10} {'Death':<40}")
+    print("-" * 100)
+
+    for g in games:
+        death = (g["death_reason"] or "")[:38]
+        ascended = "YES!" if g["ascended"] else "no"
+        print(f"{g['id']:<6} {g['username']:<16} {g['score']:<10} {ascended:<10} {death}")
+
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Orange Nethack CLI tools for local testing",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Commands:
+  simulate-payment  Manually trigger payment confirmation for a session
+  simulate-game     Append a fake xlogfile entry and process it
+  test-flow         Run a complete automated test
+  show-sessions     List active sessions
+  show-pot          Show current pot balance
+  show-games        Show recent games
+
+Examples:
+  %(prog)s simulate-payment 1
+  %(prog)s simulate-game nh_abc12345 --ascend
+  %(prog)s simulate-game nh_abc12345 --score 5000 --death "killed by a dragon"
+  %(prog)s test-flow
+  %(prog)s show-pot
+""",
+    )
+
+    subparsers = parser.add_subparsers(dest="command", help="Command to run")
+
+    # simulate-payment
+    sp_payment = subparsers.add_parser("simulate-payment", help="Simulate payment confirmation")
+    sp_payment.add_argument("session_id", type=int, help="Session ID to confirm payment for")
+
+    # simulate-game
+    sp_game = subparsers.add_parser("simulate-game", help="Simulate a game completion")
+    sp_game.add_argument("username", help="Username (e.g., nh_abc12345)")
+    sp_game.add_argument("--ascend", action="store_true", help="Player ascended (wins pot)")
+    sp_game.add_argument("--score", type=int, default=100, help="Game score (default: 100)")
+    sp_game.add_argument("--death", type=str, help="Death reason (default: 'killed by a goblin')")
+
+    # test-flow
+    subparsers.add_parser("test-flow", help="Run complete automated test")
+
+    # show-sessions
+    subparsers.add_parser("show-sessions", help="Show active sessions")
+
+    # show-pot
+    subparsers.add_parser("show-pot", help="Show current pot balance")
+
+    # show-games
+    sp_games = subparsers.add_parser("show-games", help="Show recent games")
+    sp_games.add_argument("--limit", type=int, default=10, help="Number of games to show")
+
+    args = parser.parse_args()
+
+    if not args.command:
+        parser.print_help()
+        return 1
+
+    # Run the appropriate command
+    if args.command == "simulate-payment":
+        return asyncio.run(cmd_simulate_payment(args.session_id))
+    elif args.command == "simulate-game":
+        return asyncio.run(
+            cmd_simulate_game(
+                username=args.username,
+                ascend=args.ascend,
+                score=args.score,
+                death=args.death,
+            )
+        )
+    elif args.command == "test-flow":
+        return asyncio.run(cmd_test_flow())
+    elif args.command == "show-sessions":
+        return asyncio.run(cmd_show_sessions())
+    elif args.command == "show-pot":
+        return asyncio.run(cmd_show_pot())
+    elif args.command == "show-games":
+        return asyncio.run(cmd_show_games(limit=args.limit))
+    else:
+        parser.print_help()
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

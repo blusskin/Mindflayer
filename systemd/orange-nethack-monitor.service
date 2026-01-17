@@ -1,0 +1,21 @@
+[Unit]
+Description=Orange Nethack Game Monitor
+After=network.target orange-nethack-api.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=/opt/orange-nethack
+Environment=PATH=/opt/orange-nethack/.venv/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/opt/orange-nethack/.env
+ExecStart=/opt/orange-nethack/.venv/bin/orange-nethack-monitor
+Restart=always
+RestartSec=5
+
+# Note: This service needs root to manage users
+# Security hardening
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target
