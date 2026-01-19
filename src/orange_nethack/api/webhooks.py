@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from orange_nethack.config import get_settings
 from orange_nethack.database import get_db
+from orange_nethack.lightning.strike import get_lightning_client, StrikeClient
 from orange_nethack.users.manager import UserManager
 
 logger = logging.getLogger(__name__)
@@ -33,7 +34,7 @@ async def confirm_payment(
     This function is used by both the webhook and CLI simulate-payment.
 
     Args:
-        payment_hash: The payment hash from LNbits
+        payment_hash: The Strike invoice ID (stored as payment_hash in DB)
         session_id: The session ID (alternative to payment_hash)
         skip_user_creation: If True, skip Linux user creation (for mock mode)
 
@@ -100,10 +101,20 @@ async def confirm_payment(
 
 @webhook_router.post("/payment")
 async def handle_payment_webhook(request: Request):
-    """Handle LNbits payment webhook.
+    """Handle Strike payment webhook.
 
-    LNbits sends a POST request when a payment is received.
-    The payload contains the payment_hash which we use to find the session.
+    Strike sends a POST request when an invoice is updated.
+    The payload contains only the entity ID - we must fetch the invoice
+    to check if it's been paid.
+
+    Strike webhook payload format:
+    {
+        "eventType": "invoice.updated",
+        "data": {
+            "entityId": "invoice-uuid",
+            "changes": ["state"]
+        }
+    }
     """
     # Parse webhook payload
     try:
@@ -112,18 +123,42 @@ async def handle_payment_webhook(request: Request):
         logger.error(f"Failed to parse webhook payload: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
 
-    payment_hash = payload.get("payment_hash")
-    if not payment_hash:
-        logger.warning("Webhook received without payment_hash")
-        raise HTTPException(status_code=400, detail="Missing payment_hash")
+    event_type = payload.get("eventType")
+    if event_type != "invoice.updated":
+        logger.info(f"Ignoring webhook event type: {event_type}")
+        return {"status": "ignored", "reason": f"event type {event_type}"}
 
-    # Check if payment is pending (not yet confirmed)
-    if payload.get("pending", False):
-        logger.info(f"Payment {payment_hash} is still pending")
-        return {"status": "pending"}
+    data = payload.get("data", {})
+    invoice_id = data.get("entityId")
 
-    # Use shared confirmation logic
-    result = await confirm_payment(payment_hash=payment_hash)
+    if not invoice_id:
+        logger.warning("Webhook received without entityId")
+        raise HTTPException(status_code=400, detail="Missing entityId in webhook data")
+
+    logger.info(f"Received Strike webhook for invoice: {invoice_id}")
+
+    # Fetch invoice details from Strike to check payment status
+    client = get_lightning_client()
+
+    # Only StrikeClient has get_invoice method
+    if isinstance(client, StrikeClient):
+        invoice_data = await client.get_invoice(invoice_id)
+        if not invoice_data:
+            logger.warning(f"Invoice {invoice_id} not found in Strike")
+            raise HTTPException(status_code=404, detail="Invoice not found")
+
+        invoice_state = invoice_data.get("state")
+        if invoice_state != "PAID":
+            logger.info(f"Invoice {invoice_id} state is {invoice_state}, not PAID")
+            return {"status": "pending", "state": invoice_state}
+    else:
+        # Mock client - check if payment is marked as paid
+        is_paid = await client.check_payment(invoice_id)
+        if not is_paid:
+            return {"status": "pending"}
+
+    # Use shared confirmation logic (invoice_id is stored as payment_hash)
+    result = await confirm_payment(payment_hash=invoice_id)
 
     if not result.success:
         if result.error == "Session not found":

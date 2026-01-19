@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 
 from orange_nethack.config import get_settings
 from orange_nethack.database import get_db
-from orange_nethack.lightning.lnbits import get_lnbits_client
+from orange_nethack.lightning.strike import get_lightning_client
 from orange_nethack.models import (
     GameResult,
     HealthResponse,
@@ -138,7 +138,7 @@ ssh USERNAME@{request.base_url.hostname}
 async def create_play_session(request: Request, body: PlayRequest | None = None):
     settings = get_settings()
     db = get_db()
-    lnbits = get_lnbits_client()
+    lightning = get_lightning_client()
 
     # Check if we have too many active sessions
     active_count = await db.count_active_sessions()
@@ -152,7 +152,7 @@ async def create_play_session(request: Request, body: PlayRequest | None = None)
     # Create invoice
     webhook_url = str(request.base_url).rstrip("/") + "/api/webhook/payment"
     try:
-        invoice = await lnbits.create_invoice(
+        invoice = await lightning.create_invoice(
             amount_sats=settings.ante_sats,
             memo=f"Orange Nethack ante - {username}",
             webhook_url=webhook_url,
@@ -202,7 +202,7 @@ async def set_payout_address(session_id: int, body: SetAddressRequest):
 @router.get("/api/session/{session_id}", response_model=SessionResponse)
 async def get_session(session_id: int, request: Request):
     db = get_db()
-    lnbits = get_lnbits_client()
+    lightning = get_lightning_client()
 
     session = await db.get_session(session_id)
     if not session:
@@ -210,7 +210,7 @@ async def get_session(session_id: int, request: Request):
 
     # If pending, check if payment has been received
     if session["status"] == "pending":
-        is_paid = await lnbits.check_payment(session["payment_hash"])
+        is_paid = await lightning.check_payment(session["payment_hash"])
         if is_paid:
             # Payment received - this shouldn't normally happen as webhook should catch it
             # But handle it gracefully

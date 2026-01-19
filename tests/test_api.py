@@ -7,8 +7,8 @@ from pathlib import Path
 
 
 @pytest.fixture
-def mock_lnbits():
-    with patch("orange_nethack.api.routes.get_lnbits_client") as mock:
+def mock_lightning():
+    with patch("orange_nethack.api.routes.get_lightning_client") as mock:
         client = MagicMock()
         client.create_invoice = AsyncMock(return_value=MagicMock(
             payment_hash="test_hash_123",
@@ -66,7 +66,7 @@ def mock_settings():
 
 
 @pytest.fixture
-def client(mock_lnbits, mock_db, mock_settings):
+def client(mock_lightning, mock_db, mock_settings):
     # Patch init_db to prevent actual database initialization
     with patch("orange_nethack.api.main.init_db", new_callable=AsyncMock):
         from orange_nethack.api.main import app
@@ -83,7 +83,7 @@ class TestLandingPage:
 
 
 class TestPlayEndpoint:
-    def test_create_session(self, client, mock_db, mock_lnbits):
+    def test_create_session(self, client, mock_db, mock_lightning):
         response = client.post("/api/play", json={})
 
         assert response.status_code == 200
@@ -93,7 +93,7 @@ class TestPlayEndpoint:
         assert "payment_hash" in data
         assert data["amount_sats"] == 1000
 
-    def test_create_session_with_address(self, client, mock_db, mock_lnbits):
+    def test_create_session_with_address(self, client, mock_db, mock_lightning):
         response = client.post(
             "/api/play",
             json={"lightning_address": "user@getalby.com"}
@@ -102,7 +102,7 @@ class TestPlayEndpoint:
         assert response.status_code == 200
         mock_db.set_lightning_address.assert_called()
 
-    def test_create_session_server_full(self, client, mock_db, mock_lnbits, mock_settings):
+    def test_create_session_server_full(self, client, mock_db, mock_lightning, mock_settings):
         mock_db.count_active_sessions.return_value = 100
 
         response = client.post("/api/play", json={})
@@ -112,7 +112,7 @@ class TestPlayEndpoint:
 
 
 class TestSessionEndpoint:
-    def test_get_session_pending(self, client, mock_db, mock_lnbits):
+    def test_get_session_pending(self, client, mock_db, mock_lightning):
         response = client.get("/api/session/1")
 
         assert response.status_code == 200
@@ -122,7 +122,7 @@ class TestSessionEndpoint:
         assert data.get("username") is None
         assert data.get("password") is None
 
-    def test_get_session_active(self, client, mock_db, mock_lnbits):
+    def test_get_session_active(self, client, mock_db, mock_lightning):
         mock_db.get_session.return_value = {
             "id": 1,
             "username": "nh_test123",

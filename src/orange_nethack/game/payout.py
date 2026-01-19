@@ -2,7 +2,7 @@
 import logging
 
 from orange_nethack.database import get_db
-from orange_nethack.lightning.lnbits import get_lnbits_client
+from orange_nethack.lightning.strike import get_lightning_client
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +11,7 @@ class PayoutService:
     """Service for handling payouts to ascending players."""
 
     def __init__(self):
-        self.lnbits = get_lnbits_client()
+        self.lightning = get_lightning_client()
 
     async def handle_ascension(self, session: dict) -> dict | None:
         """Handle payout for an ascending player.
@@ -39,7 +39,7 @@ class PayoutService:
         logger.info(f"Attempting payout of {pot_amount} sats to {lightning_address}")
 
         # Try to pay via LNURL/Lightning Address
-        result = await self.lnbits.pay_lnurl(lightning_address, pot_amount)
+        result = await self.lightning.pay_lnurl(lightning_address, pot_amount)
 
         if result.success:
             logger.info(f"Payout successful! Hash: {result.payment_hash}")
@@ -55,5 +55,5 @@ class PayoutService:
             return None
 
     async def check_balance(self) -> int:
-        """Check the LNbits wallet balance."""
-        return await self.lnbits.get_balance()
+        """Check the Lightning wallet balance."""
+        return await self.lightning.get_balance()

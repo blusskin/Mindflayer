@@ -6,6 +6,7 @@ Commands:
     test-flow: Run a complete automated test
     show-sessions: List active sessions
     show-pot: Show current pot balance
+    setup-strike-webhook: Register webhook subscription with Strike API
 """
 import argparse
 import asyncio
@@ -21,7 +22,7 @@ from orange_nethack.config import get_settings
 from orange_nethack.database import Database, get_db, init_db
 from orange_nethack.game.monitor import GameMonitor
 from orange_nethack.game.xlogfile import XlogfileWatcher
-from orange_nethack.lightning.lnbits import get_lnbits_client
+from orange_nethack.lightning.strike import get_lightning_client, StrikeClient
 from orange_nethack.models import XlogEntry
 
 logging.basicConfig(
@@ -194,7 +195,7 @@ async def cmd_test_flow() -> int:
     await init_db()
     db = get_db()
     settings = get_settings()
-    lnbits = get_lnbits_client()
+    lightning = get_lightning_client()
 
     print("=" * 60)
     print("Orange Nethack - Full Test Flow")
@@ -215,7 +216,7 @@ async def cmd_test_flow() -> int:
     username = generate_username()
     password = generate_password()
 
-    invoice = await lnbits.create_invoice(
+    invoice = await lightning.create_invoice(
         amount_sats=settings.ante_sats,
         memo=f"Test - {username}",
     )
@@ -308,7 +309,7 @@ async def cmd_test_flow() -> int:
     username2 = generate_username()
     password2 = generate_password()
 
-    invoice2 = await lnbits.create_invoice(
+    invoice2 = await lightning.create_invoice(
         amount_sats=settings.ante_sats,
         memo=f"Test ascension - {username2}",
     )
@@ -432,18 +433,57 @@ async def cmd_show_games(limit: int = 10) -> int:
     return 0
 
 
+async def cmd_setup_strike_webhook(webhook_url: str) -> int:
+    """Register a webhook subscription with Strike API.
+
+    Strike uses global webhook subscriptions rather than per-invoice URLs.
+    This command registers your server's webhook endpoint to receive
+    invoice.updated events.
+    """
+    settings = get_settings()
+
+    if settings.mock_lightning:
+        print("Error: Cannot setup Strike webhook in mock mode.")
+        print("Set MOCK_LIGHTNING=false and configure STRIKE_API_KEY first.")
+        return 1
+
+    if not settings.strike_api_key:
+        print("Error: STRIKE_API_KEY is not configured.")
+        return 1
+
+    print(f"Registering Strike webhook subscription...")
+    print(f"  Webhook URL: {webhook_url}")
+
+    client = get_lightning_client()
+    if not isinstance(client, StrikeClient):
+        print("Error: Lightning client is not StrikeClient.")
+        return 1
+
+    try:
+        subscription_id = await client.subscribe_to_webhooks(webhook_url)
+        print(f"  Subscription ID: {subscription_id}")
+        print()
+        print("Webhook subscription created successfully!")
+        print("Strike will now send invoice.updated events to your webhook URL.")
+        return 0
+    except Exception as e:
+        print(f"Error: Failed to create webhook subscription: {e}")
+        return 1
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Orange Nethack CLI tools for local testing",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Commands:
-  simulate-payment  Manually trigger payment confirmation for a session
-  simulate-game     Append a fake xlogfile entry and process it
-  test-flow         Run a complete automated test
-  show-sessions     List active sessions
-  show-pot          Show current pot balance
-  show-games        Show recent games
+  simulate-payment      Manually trigger payment confirmation for a session
+  simulate-game         Append a fake xlogfile entry and process it
+  test-flow             Run a complete automated test
+  show-sessions         List active sessions
+  show-pot              Show current pot balance
+  show-games            Show recent games
+  setup-strike-webhook  Register webhook subscription with Strike API
 
 Examples:
   %(prog)s simulate-payment 1
@@ -451,6 +491,7 @@ Examples:
   %(prog)s simulate-game nh_abc12345 --score 5000 --death "killed by a dragon"
   %(prog)s test-flow
   %(prog)s show-pot
+  %(prog)s setup-strike-webhook https://your-server.com/api/webhook/payment
 """,
     )
 
@@ -480,6 +521,10 @@ Examples:
     sp_games = subparsers.add_parser("show-games", help="Show recent games")
     sp_games.add_argument("--limit", type=int, default=10, help="Number of games to show")
 
+    # setup-strike-webhook
+    sp_webhook = subparsers.add_parser("setup-strike-webhook", help="Register Strike webhook subscription")
+    sp_webhook.add_argument("webhook_url", help="Your server's webhook URL (e.g., https://your-server.com/api/webhook/payment)")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -506,6 +551,8 @@ Examples:
         return asyncio.run(cmd_show_pot())
     elif args.command == "show-games":
         return asyncio.run(cmd_show_games(limit=args.limit))
+    elif args.command == "setup-strike-webhook":
+        return asyncio.run(cmd_setup_strike_webhook(webhook_url=args.webhook_url))
     else:
         parser.print_help()
         return 1

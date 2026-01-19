@@ -11,10 +11,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # LNbits configuration
-    lnbits_url: str = "https://legend.lnbits.com"
-    lnbits_api_key: str = ""  # Invoice/read key
-    lnbits_admin_key: str = ""  # Admin key for payouts
+    # Strike configuration
+    strike_api_key: str = ""  # Strike API key
 
     # Game settings
     ante_sats: int = 1000
