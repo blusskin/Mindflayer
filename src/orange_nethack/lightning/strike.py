@@ -343,7 +343,7 @@ class StrikeClient:
             payload = {
                 "webhookUrl": webhook_url,
                 "webhookVersion": "v1",
-                "secret": secrets.token_hex(32),
+                "secret": secrets.token_hex(24),  # Max 50 chars, hex gives 48
                 "enabled": True,
                 "eventTypes": ["invoice.updated"],
             }
