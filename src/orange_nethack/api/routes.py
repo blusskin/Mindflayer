@@ -2,7 +2,6 @@ import secrets
 import string
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse
 
 from orange_nethack.config import get_settings
 from orange_nethack.database import get_db
@@ -32,106 +31,6 @@ def generate_password() -> str:
     return secrets.token_urlsafe(16)
 
 
-@router.get("/", response_class=HTMLResponse)
-async def landing_page(request: Request):
-    settings = get_settings()
-    db = get_db()
-    pot_balance = await db.get_pot_balance()
-
-    return f"""
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Orange Nethack</title>
-    <style>
-        body {{
-            font-family: monospace;
-            background: #1a1a1a;
-            color: #ff9500;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }}
-        h1 {{ color: #ff9500; text-align: center; }}
-        .pot {{ font-size: 2em; text-align: center; margin: 20px 0; }}
-        .pot span {{ color: #ffcc00; }}
-        pre {{ background: #2a2a2a; padding: 15px; border-radius: 5px; overflow-x: auto; }}
-        a {{ color: #ff9500; }}
-        .btn {{
-            display: inline-block;
-            background: #ff9500;
-            color: #1a1a1a;
-            padding: 10px 20px;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-        }}
-        .center {{ text-align: center; }}
-    </style>
-</head>
-<body>
-    <h1>🍊 Orange Nethack ⚡</h1>
-    <p class="pot">Current Pot: <span>{pot_balance:,} sats</span></p>
-
-    <h2>How to Play</h2>
-    <ol>
-        <li>Pay the ante of <strong>{settings.ante_sats} sats</strong></li>
-        <li>Receive SSH credentials</li>
-        <li>SSH in and play Nethack</li>
-        <li><strong>Ascend and win the entire pot!</strong></li>
-    </ol>
-
-    <h2>API Endpoints</h2>
-    <pre>
-# Start a new game session
-POST /api/play
-  Request: {{"lightning_address": "you@getalby.com"}}  # optional
-  Response: {{"session_id": 1, "payment_request": "lnbc...", ...}}
-
-# Set payout address (if not set during play)
-POST /api/play/{{session_id}}/address
-  Request: {{"lightning_address": "you@getalby.com"}}
-
-# Check session status and get credentials
-GET /api/session/{{session_id}}
-  Response: {{"status": "active", "username": "...", "password": "...", ...}}
-
-# Check current pot
-GET /api/pot
-
-# View stats and leaderboard
-GET /api/stats
-    </pre>
-
-    <h2>Quick Start</h2>
-    <pre>
-# 1. Create session and get invoice
-curl -X POST {request.base_url}api/play \\
-  -H "Content-Type: application/json" \\
-  -d '{{"lightning_address": "you@getalby.com"}}'
-
-# 2. Pay the invoice with your Lightning wallet
-
-# 3. Get your credentials
-curl {request.base_url}api/session/YOUR_SESSION_ID
-
-# 4. SSH in and play!
-ssh USERNAME@{request.base_url.hostname}
-    </pre>
-
-    <p class="center">
-        <a href="/api/stats" class="btn">View Leaderboard</a>
-    </p>
-
-    <hr>
-    <p style="text-align: center; color: #666;">
-        Stack sats. Ascend. Win the pot.
-    </p>
-</body>
-</html>
-"""
 
 
 @router.post("/api/play", response_model=InvoiceResponse)
@@ -163,12 +62,14 @@ async def create_play_session(request: Request, body: PlayRequest | None = None)
             detail=f"Failed to create Lightning invoice: {str(e)}"
         )
 
-    # Create session in database
+    # Create session in database with optional email and character_name
     session_id = await db.create_session(
         username=username,
         password=password,
         payment_hash=invoice.payment_hash,
         ante_sats=settings.ante_sats,
+        email=body.email if body else None,
+        character_name=body.character_name if body else None,
     )
 
     # Set lightning address if provided

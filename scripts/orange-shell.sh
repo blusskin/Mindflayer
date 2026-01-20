@@ -3,10 +3,23 @@
 # Orange Nethack SSH Shell
 # This script is the login shell for Orange Nethack players.
 # It shows a welcome message and launches nethack directly.
+# Optionally records gameplay with ttyrec for spectator mode.
 #
 
 # Configuration
 NETHACK_BINARY="${NETHACK_BINARY:-/usr/games/nethack}"
+NETHACK_NAME_FILE="$HOME/.nethack_name"
+TTYREC_BINARY="${TTYREC_BINARY:-/usr/bin/ttyrec}"
+RECORDINGS_DIR="${RECORDINGS_DIR:-/var/games/nethack/recordings}"
+
+# Read character name if the file exists
+CHARACTER_NAME=""
+if [ -f "$NETHACK_NAME_FILE" ]; then
+    CHARACTER_NAME=$(cat "$NETHACK_NAME_FILE" | tr -d '\n')
+fi
+
+# Determine recording filename (use username)
+RECORDING_FILE="$RECORDINGS_DIR/$USER.ttyrec"
 
 # Colors
 ORANGE='\033[0;33m'
@@ -42,9 +55,23 @@ echo ""
 echo -e "${ORANGE}Press ENTER to start your adventure...${NC}"
 read -r
 
-# Launch nethack
+# Build the nethack command
+if [ -n "$CHARACTER_NAME" ]; then
+    NETHACK_CMD="$NETHACK_BINARY -u $CHARACTER_NAME"
+else
+    NETHACK_CMD="$NETHACK_BINARY"
+fi
+
+# Launch nethack (with ttyrec recording if available)
 if [ -x "$NETHACK_BINARY" ]; then
-    exec "$NETHACK_BINARY"
+    # Try to record with ttyrec for spectator mode
+    if [ -x "$TTYREC_BINARY" ] && [ -d "$RECORDINGS_DIR" ]; then
+        # ttyrec will record the session to file
+        exec "$TTYREC_BINARY" -e "$NETHACK_CMD" "$RECORDING_FILE"
+    else
+        # Fallback: run nethack directly without recording
+        exec $NETHACK_CMD
+    fi
 else
     echo -e "${RED}Error: Nethack not found at $NETHACK_BINARY${NC}"
     echo "Please contact the administrator."

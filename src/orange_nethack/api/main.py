@@ -1,12 +1,18 @@
 import uvicorn
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from orange_nethack.config import get_settings
 from orange_nethack.database import init_db
 from orange_nethack.api.routes import router
 from orange_nethack.api.webhooks import webhook_router
+
+# Path to the frontend build directory
+FRONTEND_DIR = Path(__file__).parent.parent.parent.parent / "web" / "dist"
 
 
 @asynccontextmanager
@@ -32,6 +38,22 @@ app.add_middleware(
 
 app.include_router(router)
 app.include_router(webhook_router, prefix="/api/webhook")
+
+# Serve static frontend if built
+if FRONTEND_DIR.exists():
+    # Serve static assets
+    app.mount("/assets", StaticFiles(directory=FRONTEND_DIR / "assets"), name="assets")
+
+    # Catch-all route for SPA - must be after API routes
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """Serve the SPA for all non-API routes."""
+        # Check if it's a static file
+        file_path = FRONTEND_DIR / full_path
+        if file_path.is_file():
+            return FileResponse(file_path)
+        # Otherwise serve index.html for SPA routing
+        return FileResponse(FRONTEND_DIR / "index.html")
 
 
 def run():

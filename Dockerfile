@@ -3,6 +3,16 @@
 # Build:  docker build -t orange-nethack .
 # Run:    docker-compose up
 #
+
+# Stage 1: Build frontend
+FROM node:20-slim AS frontend-builder
+WORKDIR /app/web
+COPY web/package*.json ./
+RUN npm ci
+COPY web/ ./
+RUN npm run build
+
+# Stage 2: Python app with Nethack
 FROM debian:bookworm-slim
 
 # Install system dependencies
@@ -14,6 +24,7 @@ RUN apt-get update && apt-get install -y \
     openssh-server \
     sudo \
     procps \
+    ttyrec \
     && rm -rf /var/lib/apt/lists/*
 
 # Setup SSH
@@ -22,16 +33,22 @@ RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/s
 RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
 # Create directories
-RUN mkdir -p /opt/orange-nethack /var/lib/orange-nethack /var/games/nethack
+RUN mkdir -p /opt/orange-nethack /var/lib/orange-nethack /var/games/nethack /var/games/nethack/recordings
 
 # Setup nethack xlogfile
 RUN touch /var/games/nethack/xlogfile && \
     chmod 664 /var/games/nethack/xlogfile && \
     chown games:games /var/games/nethack/xlogfile
 
+# Setup recordings directory for ttyrec (spectator mode)
+RUN chmod 777 /var/games/nethack/recordings
+
 # Copy application
 WORKDIR /opt/orange-nethack
 COPY . .
+
+# Copy built frontend from Stage 1
+COPY --from=frontend-builder /app/web/dist ./web/dist
 
 # Install the shell script
 RUN cp scripts/orange-shell.sh /usr/local/bin/ && \

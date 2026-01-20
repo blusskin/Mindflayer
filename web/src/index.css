@@ -1,0 +1,171 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Base styles */
+:root {
+  --btc-orange: #f7931a;
+  --btc-gold: #ffd700;
+  --pixel-green: #00ff00;
+  --dark-bg: #0a0a0a;
+}
+
+body {
+  @apply bg-dark-bg text-gray-200 font-mono antialiased;
+  min-height: 100vh;
+}
+
+/* Pixel font for headings */
+h1, h2, h3, .pixel-text {
+  @apply font-pixel;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-dark-surface;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-btc-orange rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-btc-gold;
+}
+
+/* Scanline effect (optional) */
+.scanlines::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.15),
+    rgba(0, 0, 0, 0.15) 1px,
+    transparent 1px,
+    transparent 2px
+  );
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Orange glow effect */
+.orange-glow {
+  box-shadow: 0 0 10px var(--btc-orange), 0 0 20px var(--btc-orange);
+}
+
+.orange-glow-sm {
+  box-shadow: 0 0 5px var(--btc-orange);
+}
+
+/* Terminal cursor blink */
+.cursor-blink::after {
+  content: "█";
+  @apply animate-blink text-pixel-green;
+}
+
+/* ASCII art container */
+.ascii-art {
+  @apply text-btc-orange whitespace-pre leading-none;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 8px;
+}
+
+@media (min-width: 640px) {
+  .ascii-art {
+    font-size: 10px;
+  }
+}
+
+@media (min-width: 768px) {
+  .ascii-art {
+    font-size: 12px;
+  }
+}
+
+/* Button styles */
+.btn-primary {
+  @apply bg-btc-orange text-dark-bg font-pixel text-xs px-6 py-3
+         hover:bg-btc-gold transition-all duration-200
+         border-2 border-btc-orange hover:border-btc-gold
+         shadow-lg hover:shadow-btc-orange/50;
+}
+
+.btn-secondary {
+  @apply bg-transparent text-btc-orange font-pixel text-xs px-6 py-3
+         border-2 border-btc-orange hover:bg-btc-orange hover:text-dark-bg
+         transition-all duration-200;
+}
+
+/* Card styles */
+.card {
+  @apply bg-dark-surface border border-dark-border p-6 rounded-lg;
+}
+
+.card-glow {
+  @apply card border-btc-orange/30 shadow-lg shadow-btc-orange/10;
+}
+
+/* Input styles */
+.input {
+  @apply bg-dark-bg border border-dark-border px-4 py-2 rounded
+         text-gray-200 font-mono placeholder-gray-500
+         focus:border-btc-orange focus:outline-none focus:ring-1 focus:ring-btc-orange
+         transition-all duration-200;
+}
+
+/* Table styles */
+.table-pixel {
+  @apply w-full text-left;
+}
+
+.table-pixel th {
+  @apply text-btc-orange font-pixel text-xs pb-3 border-b border-dark-border;
+}
+
+.table-pixel td {
+  @apply py-3 border-b border-dark-border/50 text-sm;
+}
+
+.table-pixel tr:hover td {
+  @apply bg-dark-surface/50;
+}
+
+/* Status badges */
+.badge {
+  @apply inline-block px-2 py-1 text-xs font-pixel rounded;
+}
+
+.badge-pending {
+  @apply badge bg-yellow-900/50 text-yellow-500 border border-yellow-500/50;
+}
+
+.badge-active {
+  @apply badge bg-green-900/50 text-pixel-green border border-pixel-green/50;
+}
+
+.badge-playing {
+  @apply badge bg-btc-orange/20 text-btc-orange border border-btc-orange/50;
+}
+
+.badge-ended {
+  @apply badge bg-gray-800 text-gray-400 border border-gray-600;
+}
+
+/* QR code container */
+.qr-container {
+  @apply bg-white p-4 rounded-lg inline-block;
+}
+
+/* Copy button feedback */
+.copy-success {
+  @apply text-pixel-green;
+}
