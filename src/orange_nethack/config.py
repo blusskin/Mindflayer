@@ -16,7 +16,7 @@ class Settings(BaseSettings):
 
     # Game settings
     ante_sats: int = 1000
-    pot_initial: int = 10000
+    pot_initial: int = 0
 
     # Server settings
     host: str = "0.0.0.0"

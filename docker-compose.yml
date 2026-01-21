@@ -12,7 +12,8 @@ services:
       # Persist game logs
       - orange-nethack-games:/var/games/nethack
     environment:
-      - MOCK_LIGHTNING=true
+      - MOCK_LIGHTNING=false
+      - STRIKE_API_KEY=223C74016B00C72E7E2788F0CB552AF2B773CBCC9A1954F61F7AC994DD69EEB4
     restart: unless-stopped
 
 volumes:
