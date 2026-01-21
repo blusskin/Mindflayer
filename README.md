@@ -4,152 +4,133 @@ Bitcoin-themed Nethack server where players pay a Lightning ante to play, with t
 
 ## How It Works
 
-1. Player requests a game session via the API
+1. Player visits the web UI and submits their Lightning address + email
 2. Server returns a Lightning invoice for the ante (default: 1000 sats)
-3. Upon payment, SSH credentials are created
-4. Player SSHs in and plays Nethack
+3. Upon payment, SSH credentials are created and emailed to the player
+4. Player SSHs in, enters their character name, and plays Nethack
 5. If the player ascends, they win the entire pot!
-6. If they die, their ante stays in the pot
+6. If they die, their ante is added to the pot for the next player
 
-## Quick Start
+The pot starts at 0 and is purely player-funded.
 
-### Prerequisites
+## Quick Start (Docker)
 
-- Linux server with:
-  - Python 3.11+
-  - Nethack installed (`apt install nethack-console`)
-  - OpenSSH server
-- LNbits wallet (or compatible Lightning backend)
-
-### Installation
+The easiest way to run Orange Nethack is with Docker:
 
 ```bash
 # Clone the repository
 git clone https://github.com/yourusername/orange-nethack.git
 cd orange-nethack
 
-# Create virtual environment
-python -m venv .venv
-source .venv/bin/activate
+# Create .env file with your Strike API key
+cat > .env << EOF
+STRIKE_API_KEY=your_strike_api_key_here
+MOCK_LIGHTNING=false
+EOF
 
-# Install dependencies
-pip install -e .
+# Start the server
+docker-compose up -d
 
-# Copy and configure environment
-cp .env.example .env
-# Edit .env with your LNbits credentials
-
-# Initialize database
-python -c "import asyncio; from orange_nethack.database import init_db; asyncio.run(init_db())"
+# View logs
+docker-compose logs -f
 ```
 
-### Server Setup
+The server will be available at `http://localhost:8000` with:
+- Web UI at `/`
+- API at `/api/`
+- SSH on port 22
+
+### Strike API Setup
+
+1. Create a Strike account at https://strike.me
+2. Get your API key from the Strike dashboard
+3. Set up a webhook subscription (one-time):
 
 ```bash
-# Create service user
-sudo useradd -r -s /bin/false orange-nethack
-
-# Create data directory
-sudo mkdir -p /var/lib/orange-nethack
-sudo chown orange-nethack:orange-nethack /var/lib/orange-nethack
-
-# Install shell script
-sudo cp scripts/orange-shell.sh /usr/local/bin/
-sudo chmod +x /usr/local/bin/orange-shell.sh
-
-# Add shell to allowed shells
-echo "/usr/local/bin/orange-shell.sh" | sudo tee -a /etc/shells
-
-# Install systemd services
-sudo cp systemd/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable orange-nethack-api orange-nethack-monitor
-sudo systemctl start orange-nethack-api orange-nethack-monitor
+docker exec -it orange-nethack orange-nethack-cli setup-strike-webhook https://your-domain.com/api/webhook/strike
 ```
 
-### Nethack Configuration
+## CLI Commands
 
-Ensure Nethack is configured to write to xlogfile:
+The `orange-nethack-cli` tool provides admin commands:
 
 ```bash
-# Edit /etc/nethack/nethack.conf or equivalent
-# Make sure xlogfile is enabled and writable
-sudo chmod 664 /var/games/nethack/xlogfile
-sudo chown games:games /var/games/nethack/xlogfile
+# Show server statistics
+orange-nethack-cli stats
+
+# Show current pot balance
+orange-nethack-cli show-pot
+
+# Set pot to specific amount
+orange-nethack-cli set-pot 50000
+
+# Reset pot to initial (0)
+orange-nethack-cli reset-pot
+
+# List active sessions
+orange-nethack-cli show-sessions
+
+# List all sessions (including ended)
+orange-nethack-cli list-all-sessions
+
+# End a session manually
+orange-nethack-cli end-session <session_id>
+
+# Delete a Linux user
+orange-nethack-cli delete-user <username>
+
+# Simulate a game (for testing)
+orange-nethack-cli simulate-game <username>
+orange-nethack-cli simulate-game --ascend <username>
+
+# Set up Strike webhook
+orange-nethack-cli setup-strike-webhook <webhook_url>
+```
+
+In Docker:
+```bash
+docker exec -it orange-nethack orange-nethack-cli stats
 ```
 
 ## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/` | Landing page with instructions |
+| GET | `/` | Web UI (React SPA) |
 | POST | `/api/play` | Start session, get invoice |
-| POST | `/api/play/{id}/address` | Submit Lightning address for payout |
 | GET | `/api/session/{id}` | Get session status/credentials |
-| POST | `/api/webhook/payment` | LNbits payment webhook |
+| POST | `/api/webhook/strike` | Strike payment webhook |
 | GET | `/api/pot` | Current pot balance |
 | GET | `/api/stats` | Leaderboard and stats |
 | GET | `/api/health` | Health check |
 
-## Usage Example
+## Configuration
 
-```bash
-# 1. Create session and get invoice
-curl -X POST https://your-server.com/api/play \
-  -H "Content-Type: application/json" \
-  -d '{"lightning_address": "you@getalby.com"}'
+Environment variables (set in `.env` or docker-compose):
 
-# Response:
-# {
-#   "session_id": 1,
-#   "payment_request": "lnbc10u1p...",
-#   "payment_hash": "abc123...",
-#   "amount_sats": 1000
-# }
-
-# 2. Pay the invoice with your Lightning wallet
-
-# 3. Get your credentials
-curl https://your-server.com/api/session/1
-
-# Response (after payment):
-# {
-#   "id": 1,
-#   "status": "active",
-#   "username": "nh_abc12345",
-#   "password": "randompassword123",
-#   "ssh_command": "ssh nh_abc12345@your-server.com"
-# }
-
-# 4. SSH in and play!
-ssh nh_abc12345@your-server.com
-```
-
-## Development
-
-```bash
-# Install dev dependencies
-pip install -e ".[dev]"
-
-# Run tests
-pytest
-
-# Run API server locally
-python -m orange_nethack.api.main
-
-# Run monitor locally
-python -m orange_nethack.game.monitor
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `STRIKE_API_KEY` | (required) | Strike API key for payments |
+| `MOCK_LIGHTNING` | `true` | Use fake payments for testing |
+| `ANTE_SATS` | `1000` | Cost to play in satoshis |
+| `POT_INITIAL` | `0` | Starting pot balance |
+| `DATABASE_PATH` | `/var/lib/orange-nethack/db.sqlite` | SQLite database path |
+| `XLOGFILE_PATH` | `/var/games/nethack/xlogfile` | Nethack xlogfile path |
+| `SMTP_HOST` | (optional) | SMTP server for email notifications |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` | (optional) | SMTP username |
+| `SMTP_PASSWORD` | (optional) | SMTP password |
+| `SMTP_FROM_EMAIL` | (optional) | From address for emails |
 
 ## Architecture
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Web Server    │────▶│    LNbits       │────▶│  Lightning      │
+│   Web Server    │────▶│    Strike       │────▶│  Lightning      │
 │   (FastAPI)     │◀────│    API          │◀────│  Network        │
 └────────┬────────┘     └─────────────────┘     └─────────────────┘
          │
-         │ payment confirmed
+         │ payment confirmed (webhook or polling)
          ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  User Manager   │────▶│   SSH Server    │────▶│    Nethack      │
@@ -167,20 +148,80 @@ python -m orange_nethack.game.monitor
                                  ▼
                         ┌─────────────────┐
                         │  Payout Service │
-                        │  (LNbits send)  │
+                        │  (Strike LNURL) │
                         └─────────────────┘
 ```
 
-## Configuration
+### Session Tracking
 
-See `.env.example` for all configuration options.
+Sessions are tracked by Linux UID (not character name):
+- When a player pays, a Linux user is created (e.g., `nh_abc12345`)
+- The user's UID is stored in the database
+- When a game ends, the xlogfile entry's UID matches to the session
+- Character names are chosen by players on first SSH login
+
+## Development
+
+```bash
+# Create virtual environment
+python -m venv .venv
+source .venv/bin/activate
+
+# Install dev dependencies
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Run API server locally (mock mode)
+MOCK_LIGHTNING=true python -m orange_nethack.api.main
+
+# Run monitor locally
+python -m orange_nethack.game.monitor
+```
+
+## Manual Installation (without Docker)
+
+For running directly on a Linux server:
+
+```bash
+# Prerequisites
+apt install nethack-console openssh-server python3.11 python3.11-venv
+
+# Clone and install
+git clone https://github.com/yourusername/orange-nethack.git
+cd orange-nethack
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+
+# Configure
+cp .env.example .env
+# Edit .env with your Strike API key
+
+# Install shell script
+sudo cp scripts/orange-shell.sh /usr/local/bin/
+sudo chmod +x /usr/local/bin/orange-shell.sh
+echo "/usr/local/bin/orange-shell.sh" | sudo tee -a /etc/shells
+
+# Nethack xlogfile permissions
+sudo chmod 664 /var/games/nethack/xlogfile
+sudo chown games:games /var/games/nethack/xlogfile
+
+# Install systemd services
+sudo cp systemd/*.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable orange-nethack-api orange-nethack-monitor
+sudo systemctl start orange-nethack-api orange-nethack-monitor
+```
 
 ## Security Notes
 
-- The game monitor service runs as root to manage user accounts
-- Player accounts are isolated with the custom shell
+- The game monitor service requires root to manage user accounts
+- Player accounts are isolated with a custom shell (can only run Nethack)
 - SSH access is restricted to the Nethack game only
-- Consider running behind a reverse proxy (nginx) with HTTPS
+- Consider running behind a reverse proxy (nginx/Caddy) with HTTPS
+- Never commit `.env` files or API keys to git
 
 ## License
 
