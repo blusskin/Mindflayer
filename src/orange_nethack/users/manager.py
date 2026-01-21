@@ -48,7 +48,8 @@ class UserManager:
         - Be in the games group (for nethack access)
         - Have the custom orange-shell as login shell
         - Have a home directory
-        - Have a .nethack_name file with "player" (so Nethack prompts for name)
+
+        The shell script will prompt for character name on first login.
 
         Returns:
             The Linux UID of the created user.
@@ -95,9 +96,6 @@ class UserManager:
             # Try to clean up the user we just created
             await self.delete_user(username)
             raise UserManagerError(f"Failed to set password for {username}: {stderr.decode()}")
-
-        # Always write "player" as character name so Nethack prompts for actual name
-        await self._write_character_name(username, "player")
 
         # Get the UID of the created user
         uid = await self._get_user_uid(username)
