@@ -98,11 +98,19 @@ Orange Nethack - Stack sats. Ascend. Win the pot.
         char_display = character_name or "Unknown"
 
         if ascended:
-            result_text = f"""
+            if payout_sats:
+                result_text = f"""
 CONGRATULATIONS! You ascended and won {payout_sats:,} sats!
 
 Your mastery of the dungeon has been rewarded. The payout has been sent
 to your Lightning address.
+"""
+            else:
+                result_text = """
+CONGRATULATIONS! You ascended!
+
+However, there was an issue processing your payout. Please contact the
+administrator with your session details.
 """
         else:
             result_text = f"""

@@ -274,10 +274,12 @@ class StrikeClient:
 
             if response.status_code >= 400:
                 try:
-                    error_detail = response.json().get("message", "Failed to create payment quote")
+                    error_json = response.json()
+                    error_detail = error_json.get("message") or error_json.get("data", {}).get("message") or str(error_json)
                 except Exception:
                     error_detail = response.text
-                logger.error(f"Strike payment quote failed: {error_detail}")
+                logger.error(f"Strike payment quote failed ({response.status_code}): {error_detail}")
+                logger.error(f"  Request: {quote_payload}")
                 return PaymentResult(success=False, error=error_detail)
 
             quote_data = response.json()
