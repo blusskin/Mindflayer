@@ -1,3 +1,4 @@
+import logging
 import uvicorn
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -10,6 +11,12 @@ from orange_nethack.config import get_settings
 from orange_nethack.database import init_db
 from orange_nethack.api.routes import router
 from orange_nethack.api.webhooks import webhook_router
+
+# Configure logging for the API server
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
 
 # Path to the frontend build directory
 FRONTEND_DIR = Path(__file__).parent.parent.parent.parent / "web" / "dist"
