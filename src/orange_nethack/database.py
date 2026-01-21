@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS games (
     id INTEGER PRIMARY KEY,
     session_id INTEGER REFERENCES sessions(id),
+    character_name TEXT,
     death_reason TEXT,
     score INTEGER,
     turns INTEGER,
@@ -83,6 +84,13 @@ class Database:
         await db.execute(
             "CREATE INDEX IF NOT EXISTS idx_sessions_linux_uid ON sessions(linux_uid)"
         )
+
+        # Migrate games table - add character_name column
+        cursor = await db.execute("PRAGMA table_info(games)")
+        game_columns = {row[1] for row in await cursor.fetchall()}
+
+        if "character_name" not in game_columns:
+            await db.execute("ALTER TABLE games ADD COLUMN character_name TEXT")
 
     @asynccontextmanager
     async def connection(self) -> AsyncGenerator[aiosqlite.Connection, None]:
@@ -219,6 +227,7 @@ class Database:
     async def create_game(
         self,
         session_id: int,
+        character_name: str,
         death_reason: str,
         score: int,
         turns: int,
@@ -230,10 +239,10 @@ class Database:
             cursor = await db.execute(
                 """
                 INSERT INTO games
-                (session_id, death_reason, score, turns, ascended, payout_sats, payout_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
+                (session_id, character_name, death_reason, score, turns, ascended, payout_sats, payout_hash)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, death_reason, score, turns, ascended, payout_sats, payout_hash),
+                (session_id, character_name, death_reason, score, turns, ascended, payout_sats, payout_hash),
             )
             await db.commit()
             return cursor.lastrowid
@@ -242,7 +251,7 @@ class Database:
         async with self.connection() as db:
             cursor = await db.execute(
                 """
-                SELECT g.*, s.username
+                SELECT g.*, COALESCE(g.character_name, s.username) as username
                 FROM games g
                 JOIN sessions s ON g.session_id = s.id
                 ORDER BY g.ended_at DESC
@@ -257,7 +266,7 @@ class Database:
         async with self.connection() as db:
             cursor = await db.execute(
                 """
-                SELECT g.*, s.username
+                SELECT g.*, COALESCE(g.character_name, s.username) as username
                 FROM games g
                 JOIN sessions s ON g.session_id = s.id
                 ORDER BY g.score DESC
@@ -272,7 +281,7 @@ class Database:
         async with self.connection() as db:
             cursor = await db.execute(
                 """
-                SELECT g.*, s.username
+                SELECT g.*, COALESCE(g.character_name, s.username) as username
                 FROM games g
                 JOIN sessions s ON g.session_id = s.id
                 WHERE g.ascended = TRUE

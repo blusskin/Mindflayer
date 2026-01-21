@@ -97,6 +97,7 @@ class GameMonitor:
         # Record game in database
         await db.create_game(
             session_id=session["id"],
+            character_name=entry.name,
             death_reason=entry.death,
             score=entry.score,
             turns=entry.turns,
