@@ -50,8 +50,9 @@ class PayoutService:
             }
         else:
             logger.error(f"Payout failed: {result.error}")
-            # Restore the pot on failure
-            await db.add_to_pot(pot_amount)
+            # Restore the pot to original amount on failure
+            await db.set_pot_balance(pot_amount)
+            logger.info(f"Restored pot to {pot_amount} sats")
             return None
 
     async def check_balance(self) -> int:
