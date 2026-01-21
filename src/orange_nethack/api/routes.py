@@ -3,6 +3,7 @@ import string
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request
 
+from orange_nethack.api.webhooks import confirm_payment
 from orange_nethack.config import get_settings
 from orange_nethack.database import get_db
 from orange_nethack.lightning.strike import get_lightning_client
@@ -112,11 +113,11 @@ async def get_session(session_id: int, request: Request):
     if session["status"] == "pending":
         is_paid = await lightning.check_payment(session["payment_hash"])
         if is_paid:
-            # Payment received - this shouldn't normally happen as webhook should catch it
-            # But handle it gracefully
-            await db.update_session_status(session_id, "active")
-            await db.add_to_pot(session["ante_sats"])
-            session["status"] = "active"
+            # Payment received - use confirm_payment to create user and send email
+            hostname = request.base_url.hostname or "localhost"
+            result = await confirm_payment(session_id=session_id, hostname=hostname)
+            if result.success:
+                session["status"] = "active"
 
     # Only return credentials if session is active
     response = SessionResponse(
