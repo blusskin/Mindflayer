@@ -16,6 +16,9 @@ class PlayRequest(BaseModel):
     lightning_address: str | None = Field(
         None, description="Lightning address for payout on ascension"
     )
+    email: str | None = Field(
+        None, description="Email for payment confirmation and game result notifications"
+    )
 
 
 class SetAddressRequest(BaseModel):

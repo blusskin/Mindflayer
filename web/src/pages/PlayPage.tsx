@@ -16,7 +16,6 @@ export function PlayPage() {
   const [formData, setFormData] = useState<PlayRequest>({
     lightning_address: '',
     email: '',
-    character_name: '',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,7 +40,6 @@ export function PlayPage() {
       const requestData: PlayRequest = {};
       if (formData.lightning_address) requestData.lightning_address = formData.lightning_address;
       if (formData.email) requestData.email = formData.email;
-      if (formData.character_name) requestData.character_name = formData.character_name;
 
       const result = await api.createSession(requestData);
       setInvoice(result);
@@ -63,7 +61,7 @@ export function PlayPage() {
     setStep('configure');
     setInvoice(null);
     setError(null);
-    setFormData({ lightning_address: '', email: '', character_name: '' });
+    setFormData({ lightning_address: '', email: '' });
   };
 
   return (
@@ -122,23 +120,6 @@ export function PlayPage() {
               />
               <p className="text-xs text-gray-500 mt-1">
                 Receive the pot if you ascend. Can be set later.
-              </p>
-            </div>
-
-            <div>
-              <label className="block text-sm text-gray-400 mb-2">
-                Character Name <span className="text-gray-600">(optional)</span>
-              </label>
-              <input
-                type="text"
-                placeholder="Adventurer"
-                value={formData.character_name}
-                onChange={handleInputChange('character_name')}
-                pattern="^[a-zA-Z0-9_]{1,31}$"
-                className="input w-full"
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                1-31 characters, alphanumeric and underscores only.
               </p>
             </div>
 

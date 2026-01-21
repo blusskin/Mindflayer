@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from orange_nethack.config import get_settings
 from orange_nethack.database import get_db
+from orange_nethack.email import get_email_service
 from orange_nethack.lightning.strike import get_lightning_client, StrikeClient
 from orange_nethack.users.manager import UserManager
 
@@ -27,6 +28,7 @@ async def confirm_payment(
     payment_hash: str | None = None,
     session_id: int | None = None,
     skip_user_creation: bool = False,
+    hostname: str = "localhost",
 ) -> PaymentConfirmationResult:
     """Confirm payment and activate a session.
 
@@ -37,6 +39,7 @@ async def confirm_payment(
         payment_hash: The Strike invoice ID (stored as payment_hash in DB)
         session_id: The session ID (alternative to payment_hash)
         skip_user_creation: If True, skip Linux user creation (for mock mode)
+        hostname: Server hostname for SSH command in email
 
     Returns:
         PaymentConfirmationResult with status information
@@ -80,8 +83,11 @@ async def confirm_payment(
     if not skip_user_creation:
         try:
             user_manager = UserManager()
-            await user_manager.create_user(session["username"], session["password"])
-            logger.info(f"Created Linux user: {session['username']}")
+            linux_uid = await user_manager.create_user(
+                session["username"], session["password"]
+            )
+            await db.set_linux_uid(session["id"], linux_uid)
+            logger.info(f"Created Linux user: {session['username']} (UID: {linux_uid})")
         except Exception as e:
             logger.error(f"Failed to create Linux user {session['username']}: {e}")
             # Still mark as active - user creation might work on retry or manual intervention
@@ -90,6 +96,22 @@ async def confirm_payment(
 
     # Update session status
     await db.update_session_status(session["id"], "active")
+
+    # Send payment confirmation email if email provided
+    email = session.get("email")
+    if email:
+        try:
+            email_service = get_email_service()
+            email_service.send_payment_confirmed(
+                email=email,
+                username=session["username"],
+                password=session["password"],
+                hostname=hostname,
+                ante_sats=session["ante_sats"],
+                pot_balance=new_pot_balance,
+            )
+        except Exception as e:
+            logger.error(f"Failed to send payment confirmation email: {e}")
 
     return PaymentConfirmationResult(
         success=True,
@@ -158,7 +180,8 @@ async def handle_payment_webhook(request: Request):
             return {"status": "pending"}
 
     # Use shared confirmation logic (invoice_id is stored as payment_hash)
-    result = await confirm_payment(payment_hash=invoice_id)
+    hostname = request.base_url.hostname or "localhost"
+    result = await confirm_payment(payment_hash=invoice_id, hostname=hostname)
 
     if not result.success:
         if result.error == "Session not found":

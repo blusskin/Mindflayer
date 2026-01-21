@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     lightning_address TEXT,
+    email TEXT,
+    linux_uid INTEGER,
     payment_hash TEXT UNIQUE NOT NULL,
     ante_sats INTEGER NOT NULL,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'playing', 'ended')),
@@ -44,6 +46,7 @@ CREATE TABLE IF NOT EXISTS games (
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
 CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username);
 CREATE INDEX IF NOT EXISTS idx_sessions_payment_hash ON sessions(payment_hash);
+CREATE INDEX IF NOT EXISTS idx_sessions_linux_uid ON sessions(linux_uid);
 CREATE INDEX IF NOT EXISTS idx_games_session_id ON games(session_id);
 CREATE INDEX IF NOT EXISTS idx_games_ascended ON games(ascended);
 """
@@ -62,7 +65,20 @@ class Database:
                 "INSERT OR IGNORE INTO pot (id, balance_sats) VALUES (1, ?)",
                 (get_settings().pot_initial,),
             )
+            # Migration: add email and character_name columns if they don't exist
+            await self._migrate_sessions_table(db)
             await db.commit()
+
+    async def _migrate_sessions_table(self, db: aiosqlite.Connection) -> None:
+        """Add email and linux_uid columns if they don't exist."""
+        cursor = await db.execute("PRAGMA table_info(sessions)")
+        columns = {row[1] for row in await cursor.fetchall()}
+
+        if "email" not in columns:
+            await db.execute("ALTER TABLE sessions ADD COLUMN email TEXT")
+
+        if "linux_uid" not in columns:
+            await db.execute("ALTER TABLE sessions ADD COLUMN linux_uid INTEGER")
 
     @asynccontextmanager
     async def connection(self) -> AsyncGenerator[aiosqlite.Connection, None]:
@@ -103,14 +119,15 @@ class Database:
         password: str,
         payment_hash: str,
         ante_sats: int,
+        email: str | None = None,
     ) -> int:
         async with self.connection() as db:
             cursor = await db.execute(
                 """
-                INSERT INTO sessions (username, password, payment_hash, ante_sats, status)
-                VALUES (?, ?, ?, ?, 'pending')
+                INSERT INTO sessions (username, password, payment_hash, ante_sats, email, status)
+                VALUES (?, ?, ?, ?, ?, 'pending')
                 """,
-                (username, password, payment_hash, ante_sats),
+                (username, password, payment_hash, ante_sats, email),
             )
             await db.commit()
             return cursor.lastrowid
@@ -138,6 +155,23 @@ class Database:
             )
             row = await cursor.fetchone()
             return dict(row) if row else None
+
+    async def get_session_by_uid(self, linux_uid: int) -> dict | None:
+        async with self.connection() as db:
+            cursor = await db.execute(
+                "SELECT * FROM sessions WHERE linux_uid = ? AND status IN ('active', 'playing')",
+                (linux_uid,),
+            )
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def set_linux_uid(self, session_id: int, linux_uid: int) -> None:
+        async with self.connection() as db:
+            await db.execute(
+                "UPDATE sessions SET linux_uid = ? WHERE id = ?",
+                (linux_uid, session_id),
+            )
+            await db.commit()
 
     async def get_active_sessions(self) -> list[dict]:
         async with self.connection() as db:

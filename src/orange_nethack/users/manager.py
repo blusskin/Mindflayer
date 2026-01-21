@@ -34,13 +34,24 @@ class UserManager:
         returncode, _, _ = await self._run_command("id", username)
         return returncode == 0
 
-    async def create_user(self, username: str, password: str) -> None:
+    async def _get_user_uid(self, username: str) -> int:
+        """Get the Linux UID for a user."""
+        returncode, stdout, stderr = await self._run_command("id", "-u", username)
+        if returncode != 0:
+            raise UserManagerError(f"Failed to get UID for {username}: {stderr}")
+        return int(stdout.strip())
+
+    async def create_user(self, username: str, password: str) -> int:
         """Create a Linux user with the given username and password.
 
         The user will:
         - Be in the games group (for nethack access)
         - Have the custom orange-shell as login shell
         - Have a home directory
+        - Have a .nethack_name file with "player" (so Nethack prompts for name)
+
+        Returns:
+            The Linux UID of the created user.
         """
         # Validate username (should already be safe from our generator, but double-check)
         if not username.startswith(self.settings.nethack_user_prefix):
@@ -48,7 +59,7 @@ class UserManager:
 
         if await self.user_exists(username):
             logger.warning(f"User {username} already exists")
-            return
+            return await self._get_user_uid(username)
 
         # Create user with games group and custom shell
         returncode, stdout, stderr = await self._run_command(
@@ -85,7 +96,26 @@ class UserManager:
             await self.delete_user(username)
             raise UserManagerError(f"Failed to set password for {username}: {stderr.decode()}")
 
-        logger.info(f"Created user {username}")
+        # Always write "player" as character name so Nethack prompts for actual name
+        await self._write_character_name(username, "player")
+
+        # Get the UID of the created user
+        uid = await self._get_user_uid(username)
+        logger.info(f"Created user {username} with UID {uid}")
+        return uid
+
+    async def _write_character_name(self, username: str, character_name: str) -> None:
+        """Write the character name to the user's home directory."""
+        home_dir = Path(f"/home/{username}")
+        name_file = home_dir / ".nethack_name"
+
+        try:
+            name_file.write_text(character_name + "\n")
+            # Set ownership to the user
+            await self._run_command("chown", f"{username}:{self.settings.nethack_group}", str(name_file))
+            logger.info(f"Wrote character name '{character_name}' for user {username}")
+        except Exception as e:
+            logger.warning(f"Failed to write character name for {username}: {e}")
 
     async def delete_user(self, username: str) -> None:
         """Delete a Linux user and their home directory."""

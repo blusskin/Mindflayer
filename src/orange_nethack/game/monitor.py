@@ -6,6 +6,7 @@ import sys
 
 from orange_nethack.config import get_settings
 from orange_nethack.database import get_db, init_db
+from orange_nethack.email import get_email_service
 from orange_nethack.game.payout import PayoutService
 from orange_nethack.game.xlogfile import XlogfileWatcher
 from orange_nethack.models import XlogEntry
@@ -58,22 +59,23 @@ class GameMonitor:
     async def _handle_game_end(self, entry: XlogEntry) -> None:
         """Handle a completed game."""
         db = get_db()
-        username = entry.name
 
-        logger.info(f"Game ended for {username}: {entry.death} (score: {entry.score})")
-
-        # Check if this is one of our managed users
-        if not username.startswith(self.settings.nethack_user_prefix):
-            logger.debug(f"Ignoring game for non-managed user: {username}")
+        # entry.uid is the Linux UID, entry.name is the character name chosen in Nethack
+        if entry.uid is None:
+            logger.warning(f"Xlogfile entry has no UID: {entry.name}")
             return
 
-        # Find the session for this user
-        session = await db.get_session_by_username(username)
+        logger.info(f"Game ended for UID {entry.uid} (character: {entry.name}): {entry.death} (score: {entry.score})")
+
+        # Find the session by Linux UID
+        session = await db.get_session_by_uid(entry.uid)
         if not session:
-            logger.warning(f"No session found for user: {username}")
+            logger.debug(f"No active session found for UID {entry.uid}")
             return
 
-        # Check session is in an active state
+        username = session["username"]
+
+        # Check session is in an active state (redundant given get_session_by_uid filters, but safe)
         if session["status"] not in ("active", "playing"):
             logger.warning(f"Session {session['id']} has unexpected status: {session['status']}")
             return
@@ -83,14 +85,14 @@ class GameMonitor:
         payout_hash = None
 
         if entry.ascended:
-            logger.info(f"ASCENSION! User {username} has ascended!")
+            logger.info(f"ASCENSION! UID {entry.uid} (character: {entry.name}) has ascended!")
             payout_result = await self.payout_service.handle_ascension(session)
             if payout_result:
                 payout_sats = payout_result["amount"]
                 payout_hash = payout_result.get("payment_hash")
                 logger.info(f"Payout of {payout_sats} sats sent to {session['lightning_address']}")
             else:
-                logger.error(f"Failed to send payout for ascension by {username}")
+                logger.error(f"Failed to send payout for ascension by UID {entry.uid}")
 
         # Record game in database
         await db.create_game(
@@ -105,6 +107,26 @@ class GameMonitor:
 
         # Mark session as ended
         await db.update_session_status(session["id"], "ended")
+
+        # Send game result email if email provided
+        email = session.get("email")
+        if email:
+            try:
+                pot_balance = await db.get_pot_balance()
+                email_service = get_email_service()
+                email_service.send_game_result(
+                    email=email,
+                    character_name=entry.name,  # Use actual character name from xlogfile
+                    score=entry.score,
+                    turns=entry.turns,
+                    death_reason=entry.death,
+                    ascended=entry.ascended,
+                    ante_sats=session["ante_sats"],
+                    pot_balance=pot_balance,
+                    payout_sats=payout_sats,
+                )
+            except Exception as e:
+                logger.error(f"Failed to send game result email: {e}")
 
         # Clean up Linux user
         try:

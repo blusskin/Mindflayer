@@ -47,6 +47,7 @@ def format_xlog_entry(
     death: str = "killed by a goblin",
     score: int = 100,
     turns: int = 50,
+    uid: int = 1000,
     role: str = "Val",
     race: str = "Hum",
     gender: str = "Fem",
@@ -67,7 +68,7 @@ def format_xlog_entry(
         f"deaths=1",
         f"deathdate={date}",
         f"birthdate={date}",
-        f"uid=1000",
+        f"uid={uid}",
         f"role={role}",
         f"race={race}",
         f"gender={gender}",
@@ -133,23 +134,31 @@ async def cmd_simulate_game(
     print(f"  Score: {score}")
     print(f"  Ascended: {ascend}")
 
-    # Check if user has an active session
+    # Check if user has an active session and get the UID
     session = await db.get_session_by_username(username)
+    linux_uid = 1000  # Default UID for testing
     if not session:
         print(f"Warning: No session found for username {username}")
-        print("Creating xlogfile entry anyway...")
+        print("Creating xlogfile entry with default UID 1000...")
     elif session["status"] not in ("active", "playing"):
         print(f"Warning: Session status is '{session['status']}', not active/playing")
+        linux_uid = session.get("linux_uid") or 1000
+    else:
+        linux_uid = session.get("linux_uid") or 1000
+        print(f"  Linux UID: {linux_uid}")
 
     # Get xlogfile path
     xlogfile_path = get_test_xlogfile_path()
     print(f"  Xlogfile: {xlogfile_path}")
 
-    # Create xlogfile entry
+    # Create xlogfile entry with the session's UID
+    # Use a character name (not the Linux username) since Nethack prompts for it
+    character_name = "TestHero"
     entry = format_xlog_entry(
-        name=username,
+        name=character_name,
         death=death_msg,
         score=score,
+        uid=linux_uid,
     )
 
     # Append to xlogfile
@@ -157,7 +166,7 @@ async def cmd_simulate_game(
     with open(xlogfile_path, "a") as f:
         f.write(entry)
 
-    print(f"Xlogfile entry appended.")
+    print(f"Xlogfile entry appended (character: {character_name}, UID: {linux_uid}).")
 
     # Process the entry with GameMonitor
     print("Processing game end...")
@@ -173,7 +182,7 @@ async def cmd_simulate_game(
     # Process new entries
     entries = monitor.watcher.get_new_entries()
     for e in entries:
-        if e.name == username:
+        if e.uid == linux_uid:
             await monitor._handle_game_end(e)
             print("Game processed!")
             break
@@ -201,7 +210,12 @@ async def cmd_test_flow() -> int:
     print("Orange Nethack - Full Test Flow")
     print("=" * 60)
     print(f"Mock Lightning: {settings.mock_lightning}")
+    print(f"SMTP Configured: {settings.smtp_configured}")
     print()
+
+    # Use a fake UID for testing (in real usage, user creation sets this)
+    test_uid_1 = 10001
+    test_uid_2 = 10002
 
     # Step 1: Check initial state
     print("Step 1: Initial state")
@@ -209,12 +223,13 @@ async def cmd_test_flow() -> int:
     print(f"  Initial pot balance: {initial_pot} sats")
     print()
 
-    # Step 2: Create a session (simulating API call)
-    print("Step 2: Creating session...")
+    # Step 2: Create a session with email
+    print("Step 2: Creating session with email...")
     from orange_nethack.api.routes import generate_username, generate_password
 
     username = generate_username()
     password = generate_password()
+    test_email = "player@example.com"
 
     invoice = await lightning.create_invoice(
         amount_sats=settings.ante_sats,
@@ -226,6 +241,7 @@ async def cmd_test_flow() -> int:
         password=password,
         payment_hash=invoice.payment_hash,
         ante_sats=settings.ante_sats,
+        email=test_email,
     )
 
     # Set a test lightning address
@@ -233,21 +249,37 @@ async def cmd_test_flow() -> int:
 
     print(f"  Session ID: {session_id}")
     print(f"  Username: {username}")
+    print(f"  Email: {test_email}")
     print(f"  Payment hash: {invoice.payment_hash[:16]}...")
     print()
 
-    # Step 3: Simulate payment
-    print("Step 3: Simulating payment...")
-    result = await confirm_payment(session_id=session_id, skip_user_creation=True)
+    # Step 3: Verify email stored in DB
+    print("Step 3: Verifying session data in database...")
+    session = await db.get_session(session_id)
+    if session.get("email") != test_email:
+        print(f"  Error: Email mismatch! Expected '{test_email}', got '{session.get('email')}'")
+        return 1
+    print(f"  Email stored: {session.get('email')}")
+    print()
+
+    # Step 4: Simulate payment (this would send payment confirmation email)
+    # In mock mode, we skip user creation but manually set the UID
+    print("Step 4: Simulating payment...")
+    print("  (Payment confirmation email would be sent if SMTP configured)")
+    result = await confirm_payment(session_id=session_id, skip_user_creation=True, hostname="test.example.com")
     if not result.success:
         print(f"  Error: {result.error}")
         return 1
+
+    # Set fake UID since we skipped user creation
+    await db.set_linux_uid(session_id, test_uid_1)
     print(f"  Payment confirmed!")
     print(f"  Pot balance: {result.pot_balance} sats")
+    print(f"  Linux UID set: {test_uid_1}")
     print()
 
-    # Step 4: Verify session is active
-    print("Step 4: Verifying session status...")
+    # Step 5: Verify session is active
+    print("Step 5: Verifying session status...")
     session = await db.get_session(session_id)
     print(f"  Status: {session['status']}")
     if session["status"] != "active":
@@ -255,14 +287,18 @@ async def cmd_test_flow() -> int:
         return 1
     print()
 
-    # Step 5: Simulate a game (death, not ascension)
-    print("Step 5: Simulating game (death)...")
+    # Step 6: Simulate a game (death, not ascension)
+    print("Step 6: Simulating game (death)...")
+    print("  (Game result email would be sent if SMTP configured)")
     xlogfile_path = get_test_xlogfile_path()
 
+    # Use the test UID and a character name (not username)
+    test_character = "Conan"
     entry = format_xlog_entry(
-        name=username,
+        name=test_character,
         death="killed by a test goblin",
         score=1234,
+        uid=test_uid_1,
     )
     xlogfile_path.parent.mkdir(parents=True, exist_ok=True)
     with open(xlogfile_path, "a") as f:
@@ -276,7 +312,7 @@ async def cmd_test_flow() -> int:
 
     entries = monitor.watcher.get_new_entries()
     for e in entries:
-        if e.name == username:
+        if e.uid == test_uid_1:
             await monitor._handle_game_end(e)
             break
 
@@ -293,8 +329,8 @@ async def cmd_test_flow() -> int:
         print(f"  Game recorded: score={games[0]['score']}, death='{games[0]['death_reason']}'")
     print()
 
-    # Step 6: Check pot wasn't drained (no ascension)
-    print("Step 6: Checking pot balance...")
+    # Step 7: Check pot wasn't drained (no ascension)
+    print("Step 7: Checking pot balance...")
     pot_after_death = await db.get_pot_balance()
     print(f"  Pot balance: {pot_after_death} sats")
     expected = initial_pot + settings.ante_sats
@@ -302,12 +338,13 @@ async def cmd_test_flow() -> int:
         print(f"  Warning: Expected {expected} sats")
     print()
 
-    # Step 7: Test ascension flow
-    print("Step 7: Testing ascension flow...")
+    # Step 8: Test ascension flow with email
+    print("Step 8: Testing ascension flow...")
 
     # Create another session
     username2 = generate_username()
     password2 = generate_password()
+    test_email2 = "winner@example.com"
 
     invoice2 = await lightning.create_invoice(
         amount_sats=settings.ante_sats,
@@ -319,19 +356,28 @@ async def cmd_test_flow() -> int:
         password=password2,
         payment_hash=invoice2.payment_hash,
         ante_sats=settings.ante_sats,
+        email=test_email2,
     )
     await db.set_lightning_address(session_id2, "winner@getalby.com")
 
-    # Confirm payment
-    result2 = await confirm_payment(session_id=session_id2, skip_user_creation=True)
     print(f"  New session: {session_id2} ({username2})")
-    print(f"  Pot before ascension: {result2.pot_balance} sats")
+    print(f"  Email: {test_email2}")
+
+    # Confirm payment and set fake UID
+    result2 = await confirm_payment(session_id=session_id2, skip_user_creation=True, hostname="test.example.com")
+    await db.set_linux_uid(session_id2, test_uid_2)
+    print(f"  Payment confirmed, pot: {result2.pot_balance} sats")
+    print(f"  Linux UID set: {test_uid_2}")
+    print("  (Payment confirmation email would be sent if SMTP configured)")
 
     # Simulate ascension
+    print("  Simulating ascension...")
+    test_character2 = "Gandalf"
     entry2 = format_xlog_entry(
-        name=username2,
+        name=test_character2,
         death="ascended to demigod-hood",
         score=999999,
+        uid=test_uid_2,
     )
     with open(xlogfile_path, "a") as f:
         f.write(entry2)
@@ -340,7 +386,7 @@ async def cmd_test_flow() -> int:
     monitor.watcher.position = xlogfile_path.stat().st_size - len(entry2) - 10
     entries = monitor.watcher.get_new_entries()
     for e in entries:
-        if e.name == username2:
+        if e.uid == test_uid_2:
             await monitor._handle_game_end(e)
             break
 
@@ -350,6 +396,7 @@ async def cmd_test_flow() -> int:
         print(f"  Game recorded: score={games[0]['score']}, ascended={games[0]['ascended']}")
         if games[0]["payout_sats"]:
             print(f"  Payout: {games[0]['payout_sats']} sats")
+    print("  (Ascension email would be sent if SMTP configured)")
 
     pot_after_ascension = await db.get_pot_balance()
     print(f"  Pot after ascension: {pot_after_ascension} sats")
@@ -366,6 +413,11 @@ async def cmd_test_flow() -> int:
     print(f"Total ascensions: {stats.get('total_ascensions', 0)}")
     print(f"High score: {stats.get('high_score', 0)}")
     print()
+
+    if not settings.smtp_configured:
+        print("Note: SMTP not configured. To test actual email sending, set:")
+        print("  SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM_EMAIL")
+        print()
 
     return 0
 

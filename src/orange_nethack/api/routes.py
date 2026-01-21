@@ -62,14 +62,13 @@ async def create_play_session(request: Request, body: PlayRequest | None = None)
             detail=f"Failed to create Lightning invoice: {str(e)}"
         )
 
-    # Create session in database with optional email and character_name
+    # Create session in database with optional email
     session_id = await db.create_session(
         username=username,
         password=password,
         payment_hash=invoice.payment_hash,
         ante_sats=settings.ante_sats,
         email=body.email if body else None,
-        character_name=body.character_name if body else None,
     )
 
     # Set lightning address if provided

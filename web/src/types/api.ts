@@ -6,7 +6,6 @@ export type SessionStatus = 'pending' | 'active' | 'playing' | 'ended';
 export interface PlayRequest {
   lightning_address?: string;
   email?: string;
-  character_name?: string;
 }
 
 export interface SetAddressRequest {
