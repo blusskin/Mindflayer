@@ -62,16 +62,11 @@ else
     NETHACK_CMD="$NETHACK_BINARY"
 fi
 
-# Launch nethack (with ttyrec recording if available)
+# Launch nethack
 if [ -x "$NETHACK_BINARY" ]; then
-    # Try to record with ttyrec for spectator mode
-    if [ -x "$TTYREC_BINARY" ] && [ -d "$RECORDINGS_DIR" ]; then
-        # ttyrec will record the session to file
-        exec "$TTYREC_BINARY" -e "$NETHACK_CMD" "$RECORDING_FILE"
-    else
-        # Fallback: run nethack directly without recording
-        exec $NETHACK_CMD
-    fi
+    # Run nethack directly
+    # TODO: Add ttyrec recording for spectator mode once terminal issues are resolved
+    exec $NETHACK_CMD
 else
     echo -e "${RED}Error: Nethack not found at $NETHACK_BINARY${NC}"
     echo "Please contact the administrator."
