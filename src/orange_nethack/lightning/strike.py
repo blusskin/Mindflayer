@@ -258,7 +258,7 @@ class StrikeClient:
         async with httpx.AsyncClient() as client:
             # Step 1: Create payment quote
             quote_payload = {
-                "lnUrlOrAddress": lnurl_or_address,
+                "lnAddressOrUrl": lnurl_or_address,
                 "sourceCurrency": "BTC",
                 "amount": {
                     "amount": f"{amount_btc:.8f}",
