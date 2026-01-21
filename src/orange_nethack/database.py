@@ -46,7 +46,6 @@ CREATE TABLE IF NOT EXISTS games (
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
 CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username);
 CREATE INDEX IF NOT EXISTS idx_sessions_payment_hash ON sessions(payment_hash);
-CREATE INDEX IF NOT EXISTS idx_sessions_linux_uid ON sessions(linux_uid);
 CREATE INDEX IF NOT EXISTS idx_games_session_id ON games(session_id);
 CREATE INDEX IF NOT EXISTS idx_games_ascended ON games(ascended);
 """
@@ -79,6 +78,11 @@ class Database:
 
         if "linux_uid" not in columns:
             await db.execute("ALTER TABLE sessions ADD COLUMN linux_uid INTEGER")
+
+        # Create index on linux_uid (after column exists)
+        await db.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sessions_linux_uid ON sessions(linux_uid)"
+        )
 
     @asynccontextmanager
     async def connection(self) -> AsyncGenerator[aiosqlite.Connection, None]:
