@@ -523,26 +523,175 @@ async def cmd_setup_strike_webhook(webhook_url: str) -> int:
         return 1
 
 
+async def cmd_set_pot(amount: int) -> int:
+    """Set pot balance to a specific amount."""
+    await init_db()
+    db = get_db()
+
+    old_balance = await db.get_pot_balance()
+    await db.set_pot_balance(amount)
+
+    print(f"Pot balance updated:")
+    print(f"  Previous: {old_balance:,} sats")
+    print(f"  New:      {amount:,} sats")
+
+    return 0
+
+
+async def cmd_reset_pot() -> int:
+    """Reset pot balance to initial value."""
+    await init_db()
+    db = get_db()
+    settings = get_settings()
+
+    old_balance = await db.get_pot_balance()
+    await db.set_pot_balance(settings.pot_initial)
+
+    print(f"Pot balance reset:")
+    print(f"  Previous: {old_balance:,} sats")
+    print(f"  New:      {settings.pot_initial:,} sats (initial)")
+
+    return 0
+
+
+async def cmd_end_session(session_id: int) -> int:
+    """Force-end a session."""
+    await init_db()
+    db = get_db()
+
+    session = await db.get_session(session_id)
+    if not session:
+        print(f"Error: Session {session_id} not found.")
+        return 1
+
+    if session["status"] == "ended":
+        print(f"Session {session_id} is already ended.")
+        return 0
+
+    await db.update_session_status(session_id, "ended")
+    print(f"Session {session_id} ({session['username']}) marked as ended.")
+    print(f"  Previous status: {session['status']}")
+
+    return 0
+
+
+async def cmd_delete_user(username: str) -> int:
+    """Delete a Linux user."""
+    from orange_nethack.users.manager import UserManager
+
+    user_manager = UserManager()
+
+    if not await user_manager.user_exists(username):
+        print(f"User {username} does not exist.")
+        return 1
+
+    await user_manager.delete_user(username)
+    print(f"User {username} deleted.")
+
+    return 0
+
+
+async def cmd_list_all_sessions(limit: int = 50) -> int:
+    """Show all sessions (not just active)."""
+    await init_db()
+    db = get_db()
+
+    sessions = await db.get_all_sessions(limit=limit)
+
+    if not sessions:
+        print("No sessions found.")
+        return 0
+
+    print(f"All sessions (showing up to {limit}):")
+    print("-" * 100)
+    print(f"{'ID':<6} {'Username':<16} {'Status':<10} {'Ante':<8} {'UID':<8} {'Created':<20}")
+    print("-" * 100)
+
+    for s in sessions:
+        uid = s.get('linux_uid') or '-'
+        print(
+            f"{s['id']:<6} {s['username']:<16} {s['status']:<10} "
+            f"{s['ante_sats']:<8} {str(uid):<8} {s['created_at'][:19]}"
+        )
+
+    return 0
+
+
+async def cmd_stats() -> int:
+    """Show detailed server statistics."""
+    await init_db()
+    db = get_db()
+    settings = get_settings()
+
+    pot_balance = await db.get_pot_balance()
+    stats = await db.get_stats()
+    active_sessions = await db.get_active_sessions()
+    recent_games = await db.get_recent_games(limit=5)
+
+    print("=" * 60)
+    print("Orange Nethack Server Statistics")
+    print("=" * 60)
+    print()
+
+    print("Pot:")
+    print(f"  Balance:     {pot_balance:,} sats")
+    print(f"  Ante:        {settings.ante_sats:,} sats")
+    print(f"  Initial:     {settings.pot_initial:,} sats")
+    print()
+
+    print("Games:")
+    print(f"  Total:       {stats.get('total_games', 0)}")
+    print(f"  Ascensions:  {stats.get('total_ascensions', 0)}")
+    print(f"  High Score:  {stats.get('high_score', 0):,}")
+    print(f"  Avg Score:   {int(stats.get('avg_score', 0) or 0):,}")
+    print()
+
+    print(f"Active Sessions: {len(active_sessions)}")
+    for s in active_sessions:
+        print(f"  - {s['username']} ({s['status']})")
+    print()
+
+    if recent_games:
+        print("Recent Games:")
+        for g in recent_games:
+            status = "ASCENDED" if g['ascended'] else g['death_reason'][:30] if g['death_reason'] else "unknown"
+            print(f"  - {g['username']}: {g['score']:,} pts - {status}")
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
-        description="Orange Nethack CLI tools for local testing",
+        description="Orange Nethack CLI tools",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Commands:
-  simulate-payment      Manually trigger payment confirmation for a session
-  simulate-game         Append a fake xlogfile entry and process it
-  test-flow             Run a complete automated test
   show-sessions         List active sessions
   show-pot              Show current pot balance
   show-games            Show recent games
+  stats                 Show detailed server statistics
+  list-all-sessions     Show all sessions (not just active)
+
+Admin Commands:
+  set-pot               Set pot balance to specific amount
+  reset-pot             Reset pot to initial value
+  end-session           Force-end a session
+  delete-user           Delete a Linux user
+
+Testing Commands:
+  simulate-payment      Manually trigger payment confirmation for a session
+  simulate-game         Append a fake xlogfile entry and process it
+  test-flow             Run a complete automated test
+
+Setup Commands:
   setup-strike-webhook  Register webhook subscription with Strike API
 
 Examples:
+  %(prog)s stats
+  %(prog)s set-pot 50000
+  %(prog)s end-session 5
+  %(prog)s delete-user nh_abc12345
   %(prog)s simulate-payment 1
-  %(prog)s simulate-game nh_abc12345 --ascend
-  %(prog)s simulate-game nh_abc12345 --score 5000 --death "killed by a dragon"
-  %(prog)s test-flow
-  %(prog)s show-pot
   %(prog)s setup-strike-webhook https://your-server.com/api/webhook/payment
 """,
     )
@@ -572,6 +721,29 @@ Examples:
     # show-games
     sp_games = subparsers.add_parser("show-games", help="Show recent games")
     sp_games.add_argument("--limit", type=int, default=10, help="Number of games to show")
+
+    # stats
+    subparsers.add_parser("stats", help="Show detailed server statistics")
+
+    # list-all-sessions
+    sp_all_sessions = subparsers.add_parser("list-all-sessions", help="Show all sessions (not just active)")
+    sp_all_sessions.add_argument("--limit", type=int, default=50, help="Number of sessions to show")
+
+    # Admin commands
+    # set-pot
+    sp_set_pot = subparsers.add_parser("set-pot", help="Set pot balance to specific amount")
+    sp_set_pot.add_argument("amount", type=int, help="New pot balance in sats")
+
+    # reset-pot
+    subparsers.add_parser("reset-pot", help="Reset pot to initial value")
+
+    # end-session
+    sp_end_session = subparsers.add_parser("end-session", help="Force-end a session")
+    sp_end_session.add_argument("session_id", type=int, help="Session ID to end")
+
+    # delete-user
+    sp_delete_user = subparsers.add_parser("delete-user", help="Delete a Linux user")
+    sp_delete_user.add_argument("username", help="Username to delete (e.g., nh_abc12345)")
 
     # setup-strike-webhook
     sp_webhook = subparsers.add_parser("setup-strike-webhook", help="Register Strike webhook subscription")
@@ -603,6 +775,18 @@ Examples:
         return asyncio.run(cmd_show_pot())
     elif args.command == "show-games":
         return asyncio.run(cmd_show_games(limit=args.limit))
+    elif args.command == "stats":
+        return asyncio.run(cmd_stats())
+    elif args.command == "list-all-sessions":
+        return asyncio.run(cmd_list_all_sessions(limit=args.limit))
+    elif args.command == "set-pot":
+        return asyncio.run(cmd_set_pot(amount=args.amount))
+    elif args.command == "reset-pot":
+        return asyncio.run(cmd_reset_pot())
+    elif args.command == "end-session":
+        return asyncio.run(cmd_end_session(session_id=args.session_id))
+    elif args.command == "delete-user":
+        return asyncio.run(cmd_delete_user(username=args.username))
     elif args.command == "setup-strike-webhook":
         return asyncio.run(cmd_setup_strike_webhook(webhook_url=args.webhook_url))
     else:

@@ -124,6 +124,14 @@ class Database:
             await db.commit()
             return balance
 
+    async def set_pot_balance(self, amount_sats: int) -> None:
+        async with self.connection() as db:
+            await db.execute(
+                "UPDATE pot SET balance_sats = ?, updated_at = ? WHERE id = 1",
+                (amount_sats, datetime.now(timezone.utc)),
+            )
+            await db.commit()
+
     # Session operations
     async def create_session(
         self,
@@ -189,6 +197,15 @@ class Database:
         async with self.connection() as db:
             cursor = await db.execute(
                 "SELECT * FROM sessions WHERE status IN ('active', 'playing')"
+            )
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def get_all_sessions(self, limit: int = 50) -> list[dict]:
+        async with self.connection() as db:
+            cursor = await db.execute(
+                "SELECT * FROM sessions ORDER BY created_at DESC LIMIT ?",
+                (limit,),
             )
             rows = await cursor.fetchall()
             return [dict(row) for row in rows]
