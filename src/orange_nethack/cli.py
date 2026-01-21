@@ -640,10 +640,10 @@ async def cmd_stats() -> int:
     print()
 
     print("Games:")
-    print(f"  Total:       {stats.get('total_games', 0)}")
-    print(f"  Ascensions:  {stats.get('total_ascensions', 0)}")
-    print(f"  High Score:  {stats.get('high_score', 0):,}")
-    print(f"  Avg Score:   {int(stats.get('avg_score', 0) or 0):,}")
+    print(f"  Total:       {stats.get('total_games') or 0}")
+    print(f"  Ascensions:  {stats.get('total_ascensions') or 0}")
+    print(f"  High Score:  {(stats.get('high_score') or 0):,}")
+    print(f"  Avg Score:   {int(stats.get('avg_score') or 0):,}")
     print()
 
     print(f"Active Sessions: {len(active_sessions)}")
