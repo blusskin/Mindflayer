@@ -125,7 +125,7 @@ export function LandingPage() {
           </div>
           <div className="card border-l-4 border-l-btc-orange">
             <p className="text-sm">
-              Don't eat <span className="text-pixel-red">cockatrice</span> corpses
+              Don't touch <span className="text-pixel-red">cockatrice</span> corpses
               without gloves. Trust us.
             </p>
           </div>
