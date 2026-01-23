@@ -84,7 +84,7 @@ mkdir -p "$GAMES_DIR"/{save,dumps,recordings,users}
 chown -R root:"$NETHACK_GROUP" "$GAMES_DIR"
 chmod 775 "$GAMES_DIR"
 chmod 777 "$GAMES_DIR/recordings"
-chmod 755 "$GAMES_DIR/users"
+chmod 775 "$GAMES_DIR/users"
 
 # Create xlogfile
 touch "$GAMES_DIR/xlogfile"

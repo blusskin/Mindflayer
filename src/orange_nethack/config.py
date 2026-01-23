@@ -1,12 +1,32 @@
+import os
 from functools import lru_cache
 from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _get_env_file() -> Path | None:
+    """Get the .env file path, checking multiple locations."""
+    # Check explicit environment variable first
+    if env_path := os.environ.get("ORANGE_NETHACK_ENV_FILE"):
+        return Path(env_path)
+
+    # Check standard production location
+    prod_env = Path("/opt/orange-nethack/.env")
+    if prod_env.is_file():
+        return prod_env
+
+    # Fall back to current directory
+    local_env = Path(".env")
+    if local_env.is_file():
+        return local_env
+
+    return None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_get_env_file(),
         env_file_encoding="utf-8",
         extra="ignore",
     )
