@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     linux_uid INTEGER,
     payment_hash TEXT UNIQUE NOT NULL,
     ante_sats INTEGER NOT NULL,
+    access_token TEXT UNIQUE,
     status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'active', 'playing', 'ended')),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     ended_at TIMESTAMP
@@ -85,6 +86,14 @@ class Database:
             "CREATE INDEX IF NOT EXISTS idx_sessions_linux_uid ON sessions(linux_uid)"
         )
 
+        if "access_token" not in columns:
+            await db.execute("ALTER TABLE sessions ADD COLUMN access_token TEXT")
+
+        # Create unique index on access_token (after column exists)
+        await db.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_access_token ON sessions(access_token)"
+        )
+
         # Migrate games table - add character_name column
         cursor = await db.execute("PRAGMA table_info(games)")
         game_columns = {row[1] for row in await cursor.fetchall()}
@@ -140,14 +149,15 @@ class Database:
         payment_hash: str,
         ante_sats: int,
         email: str | None = None,
+        access_token: str | None = None,
     ) -> int:
         async with self.connection() as db:
             cursor = await db.execute(
                 """
-                INSERT INTO sessions (username, password, payment_hash, ante_sats, email, status)
-                VALUES (?, ?, ?, ?, ?, 'pending')
+                INSERT INTO sessions (username, password, payment_hash, ante_sats, email, access_token, status)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending')
                 """,
-                (username, password, payment_hash, ante_sats, email),
+                (username, password, payment_hash, ante_sats, email, access_token),
             )
             await db.commit()
             return cursor.lastrowid

@@ -15,6 +15,7 @@ export interface SetAddressRequest {
 // Response types
 export interface InvoiceResponse {
   session_id: number;
+  access_token: string;
   payment_request: string;
   payment_hash: string;
   amount_sats: number;

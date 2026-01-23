@@ -109,6 +109,8 @@ async def confirm_payment(
                 hostname=hostname,
                 ante_sats=session["ante_sats"],
                 pot_balance=new_pot_balance,
+                session_id=session["id"],
+                access_token=session.get("access_token"),
             )
         except Exception as e:
             logger.error(f"Failed to send payment confirmation email: {e}")

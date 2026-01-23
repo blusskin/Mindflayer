@@ -11,9 +11,13 @@ services:
       - orange-nethack-data:/var/lib/orange-nethack
       # Persist game logs
       - orange-nethack-games:/var/games/nethack
+    env_file:
+      - .env
     environment:
-      - MOCK_LIGHTNING=false
-      - STRIKE_API_KEY=223C74016B00C72E7E2788F0CB552AF2B773CBCC9A1954F61F7AC994DD69EEB4
+      # These override .env values if needed
+      - HOST=0.0.0.0
+      - DATABASE_PATH=/var/lib/orange-nethack/db.sqlite
+      - XLOGFILE_PATH=/var/games/nethack/xlogfile
     restart: unless-stopped
 
 volumes:

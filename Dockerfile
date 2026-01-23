@@ -33,7 +33,7 @@ RUN sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin no/' /etc/ssh/s
 RUN sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config
 
 # Create directories
-RUN mkdir -p /opt/orange-nethack /var/lib/orange-nethack /var/games/nethack /var/games/nethack/recordings
+RUN mkdir -p /opt/orange-nethack /var/lib/orange-nethack /var/games/nethack /var/games/nethack/recordings /var/games/nethack/users
 
 # Setup nethack xlogfile
 RUN touch /var/games/nethack/xlogfile && \
@@ -42,6 +42,9 @@ RUN touch /var/games/nethack/xlogfile && \
 
 # Setup recordings directory for ttyrec (spectator mode)
 RUN chmod 777 /var/games/nethack/recordings
+
+# Setup per-user Nethack directories parent (writable by root for user creation)
+RUN chmod 755 /var/games/nethack/users
 
 # Copy application
 WORKDIR /opt/orange-nethack

@@ -59,12 +59,22 @@ class EmailService:
         hostname: str,
         ante_sats: int,
         pot_balance: int,
+        session_id: int | None = None,
+        access_token: str | None = None,
     ) -> bool:
         """Send payment confirmation email with SSH credentials."""
         subject = "Orange Nethack - Payment Confirmed!"
 
-        body = f"""Your ante of {ante_sats:,} sats has been received.
+        # Build play in browser link if we have session_id and access_token
+        play_link = ""
+        if session_id and access_token:
+            play_link = f"""
+Play in Browser:
+  https://{hostname}/play/{session_id}?token={access_token}
+"""
 
+        body = f"""Your ante of {ante_sats:,} sats has been received.
+{play_link}
 SSH Credentials:
   Username: {username}
   Password: {password}

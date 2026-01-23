@@ -11,6 +11,7 @@ from orange_nethack.config import get_settings
 from orange_nethack.database import init_db
 from orange_nethack.api.routes import router
 from orange_nethack.api.webhooks import webhook_router
+from orange_nethack.api.terminal import terminal_router
 
 # Configure logging for the API server
 logging.basicConfig(
@@ -45,6 +46,7 @@ app.add_middleware(
 
 app.include_router(router)
 app.include_router(webhook_router, prefix="/api/webhook")
+app.include_router(terminal_router, prefix="/api")
 
 # Serve static frontend if built
 if FRONTEND_DIR.exists():

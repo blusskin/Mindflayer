@@ -1,8 +1,8 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, Outlet } from 'react-router-dom';
 import type { ReactNode } from 'react';
 
 interface LayoutProps {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 export function Layout({ children }: LayoutProps) {
@@ -47,7 +47,7 @@ export function Layout({ children }: LayoutProps) {
 
       {/* Main content */}
       <main className="flex-1">
-        {children}
+        {children || <Outlet />}
       </main>
 
       {/* Footer */}

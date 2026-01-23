@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 import shutil
 from pathlib import Path
 
@@ -19,10 +20,20 @@ class UserManager:
         self.settings = get_settings()
         self.shell_path = Path("/usr/local/bin/orange-shell.sh")
 
-    async def _run_command(self, *args: str) -> tuple[int, str, str]:
-        """Run a command and return (returncode, stdout, stderr)."""
+    async def _run_command(self, *args: str, use_sudo: bool = False) -> tuple[int, str, str]:
+        """Run a command and return (returncode, stdout, stderr).
+
+        Args:
+            *args: Command and arguments
+            use_sudo: If True, prefix command with sudo (for non-root execution)
+        """
+        cmd = list(args)
+        # Use sudo for privileged commands when not running as root
+        if use_sudo and os.geteuid() != 0:
+            cmd = ["sudo"] + cmd
+
         process = await asyncio.create_subprocess_exec(
-            *args,
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -73,18 +84,21 @@ class UserManager:
             "-c",
             "Orange Nethack Player",  # Comment
             username,
+            use_sudo=True,
         )
 
         if returncode != 0:
             raise UserManagerError(f"Failed to create user {username}: {stderr}")
 
         # Set password
-        returncode, stdout, stderr = await self._run_command(
-            "chpasswd",
-        )
         # chpasswd reads from stdin, so we need a different approach
+        # Use sudo if not running as root
+        chpasswd_cmd = ["chpasswd"]
+        if os.geteuid() != 0:
+            chpasswd_cmd = ["sudo", "chpasswd"]
+
         process = await asyncio.create_subprocess_exec(
-            "chpasswd",
+            *chpasswd_cmd,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -99,8 +113,55 @@ class UserManager:
 
         # Get the UID of the created user
         uid = await self._get_user_uid(username)
+
+        # Create per-user Nethack directory
+        await self._create_nethack_directory(username)
+
         logger.info(f"Created user {username} with UID {uid}")
         return uid
+
+    async def _create_nethack_directory(self, username: str) -> None:
+        """Create a per-user Nethack game directory.
+
+        This gives each user their own directory for level files and saves,
+        avoiding lock file conflicts and the MAXPLAYERS limit.
+        """
+        nethack_dir = Path(f"/var/games/nethack/users/{username}")
+        global_xlogfile = Path("/var/games/nethack/xlogfile")
+        nethack_lib = Path("/usr/lib/games/nethack")
+
+        try:
+            # Create the directory structure
+            nethack_dir.mkdir(parents=True, exist_ok=True)
+            (nethack_dir / "save").mkdir(exist_ok=True)
+
+            # Create required files
+            (nethack_dir / "perm").touch()
+            (nethack_dir / "record").touch()
+            (nethack_dir / "logfile").touch()
+
+            # Symlink xlogfile to global one so game monitor can track all games
+            user_xlogfile = nethack_dir / "xlogfile"
+            if not user_xlogfile.exists():
+                user_xlogfile.symlink_to(global_xlogfile)
+
+            # Symlink Nethack data files (read-only game data)
+            data_files = ["nhdat", "symbols", "license"]
+            for data_file in data_files:
+                src = nethack_lib / data_file
+                dst = nethack_dir / data_file
+                if src.exists() and not dst.exists():
+                    dst.symlink_to(src)
+
+            # Set ownership to the user and games group
+            await self._run_command("chown", "-R", f"{username}:games", str(nethack_dir), use_sudo=True)
+            # Make sure files are group-writable
+            await self._run_command("chmod", "-R", "g+w", str(nethack_dir), use_sudo=True)
+            # The symlink target (global xlogfile) should already be group-writable
+
+            logger.info(f"Created Nethack directory for {username}: {nethack_dir}")
+        except Exception as e:
+            logger.error(f"Failed to create Nethack directory for {username}: {e}")
 
     async def _write_character_name(self, username: str, character_name: str) -> None:
         """Write the character name to the user's home directory."""
@@ -110,13 +171,13 @@ class UserManager:
         try:
             name_file.write_text(character_name + "\n")
             # Set ownership to the user
-            await self._run_command("chown", f"{username}:{self.settings.nethack_group}", str(name_file))
+            await self._run_command("chown", f"{username}:{self.settings.nethack_group}", str(name_file), use_sudo=True)
             logger.info(f"Wrote character name '{character_name}' for user {username}")
         except Exception as e:
             logger.warning(f"Failed to write character name for {username}: {e}")
 
     async def delete_user(self, username: str) -> None:
-        """Delete a Linux user and their home directory."""
+        """Delete a Linux user, their home directory, and Nethack directory."""
         # Validate username prefix for safety
         if not username.startswith(self.settings.nethack_user_prefix):
             raise UserManagerError(f"Invalid username prefix: {username}")
@@ -126,7 +187,7 @@ class UserManager:
             return
 
         # Kill any processes owned by the user
-        await self._run_command("pkill", "-u", username)
+        await self._run_command("pkill", "-u", username, use_sudo=True)
 
         # Wait a moment for processes to die
         await asyncio.sleep(0.5)
@@ -136,16 +197,31 @@ class UserManager:
             "userdel",
             "-r",  # Remove home directory
             username,
+            use_sudo=True,
         )
 
         if returncode != 0:
             # userdel might fail if home dir is already gone, etc.
             # Try without -r as fallback
-            returncode2, _, stderr2 = await self._run_command("userdel", username)
+            returncode2, _, stderr2 = await self._run_command("userdel", username, use_sudo=True)
             if returncode2 != 0:
                 raise UserManagerError(f"Failed to delete user {username}: {stderr} / {stderr2}")
 
+        # Clean up per-user Nethack directory
+        await self._cleanup_nethack_directory(username)
+
         logger.info(f"Deleted user {username}")
+
+    async def _cleanup_nethack_directory(self, username: str) -> None:
+        """Remove the per-user Nethack directory."""
+        nethack_dir = Path(f"/var/games/nethack/users/{username}")
+
+        if nethack_dir.exists():
+            try:
+                shutil.rmtree(nethack_dir)
+                logger.info(f"Cleaned up Nethack directory for {username}")
+            except Exception as e:
+                logger.warning(f"Failed to clean up Nethack directory for {username}: {e}")
 
     async def cleanup_expired_users(self, usernames: list[str]) -> int:
         """Delete multiple users. Returns count of successfully deleted users."""
@@ -164,7 +240,7 @@ class UserManager:
             raise UserManagerError(f"User {username} does not exist")
 
         returncode, stdout, stderr = await self._run_command(
-            "chsh", "-s", shell_path, username
+            "chsh", "-s", shell_path, username, use_sudo=True
         )
 
         if returncode != 0:

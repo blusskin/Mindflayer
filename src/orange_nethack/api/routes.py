@@ -48,6 +48,7 @@ async def create_play_session(request: Request, body: PlayRequest | None = None)
     # Generate credentials
     username = generate_username()
     password = generate_password()
+    access_token = secrets.token_urlsafe(24)
 
     # Create invoice
     webhook_url = str(request.base_url).rstrip("/") + "/api/webhook/payment"
@@ -70,6 +71,7 @@ async def create_play_session(request: Request, body: PlayRequest | None = None)
         payment_hash=invoice.payment_hash,
         ante_sats=settings.ante_sats,
         email=body.email if body else None,
+        access_token=access_token,
     )
 
     # Set lightning address if provided
@@ -78,6 +80,7 @@ async def create_play_session(request: Request, body: PlayRequest | None = None)
 
     return InvoiceResponse(
         session_id=session_id,
+        access_token=access_token,
         payment_request=invoice.payment_request,
         payment_hash=invoice.payment_hash,
         amount_sats=invoice.amount_sats,
@@ -101,7 +104,7 @@ async def set_payout_address(session_id: int, body: SetAddressRequest):
 
 
 @router.get("/api/session/{session_id}", response_model=SessionResponse)
-async def get_session(session_id: int, request: Request):
+async def get_session(session_id: int, request: Request, token: str | None = None):
     db = get_db()
     lightning = get_lightning_client()
 
@@ -118,6 +121,11 @@ async def get_session(session_id: int, request: Request):
             result = await confirm_payment(session_id=session_id, hostname=hostname)
             if result.success:
                 session["status"] = "active"
+
+    # Require valid token for credential access
+    if session["status"] in ("active", "playing"):
+        if token != session.get("access_token"):
+            raise HTTPException(status_code=403, detail="Invalid or missing access token")
 
     # Only return credentials if session is active
     response = SessionResponse(

@@ -28,6 +28,7 @@ class SetAddressRequest(BaseModel):
 # Response models
 class InvoiceResponse(BaseModel):
     session_id: int
+    access_token: str = Field(..., description="Token for accessing session credentials")
     payment_request: str = Field(..., description="BOLT11 invoice to pay")
     payment_hash: str
     amount_sats: int

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { QRCodeSVG } from 'qrcode.react';
 import { api } from '@/api/client';
 import { useSession } from '@/hooks/useSession';
@@ -21,7 +22,7 @@ export function PlayPage() {
   const [error, setError] = useState<string | null>(null);
 
   const { pot } = usePot();
-  const { session } = useSession(invoice?.session_id ?? null, {
+  const { session } = useSession(invoice?.session_id ?? null, invoice?.access_token ?? null, {
     pollInterval: 2000,
     stopOnActive: true,
   });
@@ -68,13 +69,16 @@ export function PlayPage() {
     <div className="max-w-2xl mx-auto px-4 py-8">
       {/* Progress Steps */}
       <div className="flex items-center justify-center mb-8">
-        {(['configure', 'payment', 'credentials'] as Step[]).map((s, i) => (
+        {(['configure', 'payment', 'credentials'] as Step[]).map((s, i) => {
+          const steps: Step[] = ['configure', 'payment', 'credentials'];
+          const currentStepIndex = steps.indexOf(step);
+          return (
           <div key={s} className="flex items-center">
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center font-pixel text-xs ${
                 step === s
                   ? 'bg-btc-orange text-dark-bg'
-                  : step > s || (s === 'configure' && step !== 'configure')
+                  : currentStepIndex > i
                     ? 'bg-pixel-green/20 text-pixel-green border border-pixel-green'
                     : 'bg-dark-surface text-gray-500 border border-dark-border'
               }`}
@@ -84,16 +88,13 @@ export function PlayPage() {
             {i < 2 && (
               <div
                 className={`w-12 sm:w-24 h-0.5 ${
-                  step === 'payment' && s === 'configure'
-                    ? 'bg-pixel-green'
-                    : step === 'credentials' && s !== 'credentials'
-                      ? 'bg-pixel-green'
-                      : 'bg-dark-border'
+                  currentStepIndex > i ? 'bg-pixel-green' : 'bg-dark-border'
                 }`}
               />
             )}
           </div>
-        ))}
+        );
+        })}
       </div>
 
       {/* Step 1: Configure */}
@@ -226,7 +227,7 @@ export function PlayPage() {
               Payment Received!
             </h1>
             <p className="text-gray-400 text-sm">
-              Your game is ready. Connect via SSH to begin.
+              Your game is ready. Play in your browser or connect via SSH.
             </p>
           </div>
 
@@ -237,35 +238,50 @@ export function PlayPage() {
               <StatusBadge status={session.status} />
             </div>
 
-            {/* SSH Command */}
-            {session.ssh_command && (
-              <div className="bg-dark-bg border border-pixel-green/30 rounded p-4">
-                <p className="text-xs text-gray-500 mb-2">SSH Command</p>
-                <div className="flex items-center gap-2">
-                  <code className="text-pixel-green text-sm flex-1 font-mono">
-                    {session.ssh_command}
-                  </code>
-                  <CopyButton text={session.ssh_command} />
-                </div>
-              </div>
-            )}
+            {/* Play in Browser Button - Primary CTA */}
+            <Link
+              to={`/play/${session.id}?token=${encodeURIComponent(invoice?.access_token ?? '')}`}
+              className="block w-full py-4 px-6 bg-gradient-to-r from-btc-orange to-btc-gold text-dark-bg font-pixel text-sm text-center rounded-lg hover:opacity-90 transition-opacity shadow-lg shadow-btc-orange/20"
+            >
+              Play in Browser
+            </Link>
 
-            {/* Credentials */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-dark-bg border border-dark-border rounded p-3">
-                <p className="text-xs text-gray-500 mb-1">Username</p>
-                <div className="flex items-center gap-2">
-                  <code className="text-btc-orange text-sm">{session.username}</code>
-                  {session.username && <CopyButton text={session.username} label="Copy" />}
+            {/* SSH Alternative */}
+            <div className="border-t border-dark-border pt-4">
+              <p className="text-xs text-gray-500 mb-3 text-center">
+                Or connect via SSH:
+              </p>
+
+              {/* SSH Command */}
+              {session.ssh_command && (
+                <div className="bg-dark-bg border border-dark-border rounded p-4 mb-4">
+                  <p className="text-xs text-gray-500 mb-2">SSH Command</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-pixel-green text-sm flex-1 font-mono">
+                      {session.ssh_command}
+                    </code>
+                    <CopyButton text={session.ssh_command} />
+                  </div>
                 </div>
-              </div>
-              <div className="bg-dark-bg border border-dark-border rounded p-3">
-                <p className="text-xs text-gray-500 mb-1">Password</p>
-                <div className="flex items-center gap-2">
-                  <code className="text-btc-orange text-sm">
-                    {session.password?.slice(0, 8)}...
-                  </code>
-                  {session.password && <CopyButton text={session.password} label="Copy" />}
+              )}
+
+              {/* Credentials */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-dark-bg border border-dark-border rounded p-3">
+                  <p className="text-xs text-gray-500 mb-1">Username</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-btc-orange text-sm">{session.username}</code>
+                    {session.username && <CopyButton text={session.username} label="Copy" />}
+                  </div>
+                </div>
+                <div className="bg-dark-bg border border-dark-border rounded p-3">
+                  <p className="text-xs text-gray-500 mb-1">Password</p>
+                  <div className="flex items-center gap-2">
+                    <code className="text-btc-orange text-sm">
+                      {session.password?.slice(0, 8)}...
+                    </code>
+                    {session.password && <CopyButton text={session.password} label="Copy" />}
+                  </div>
                 </div>
               </div>
             </div>

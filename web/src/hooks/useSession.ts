@@ -9,6 +9,7 @@ interface UseSessionOptions {
 
 export function useSession(
   sessionId: number | null,
+  token: string | null = null,
   options: UseSessionOptions = {}
 ) {
   const { pollInterval = 2000, stopOnActive = true } = options;
@@ -21,7 +22,7 @@ export function useSession(
     if (!sessionId) return;
 
     try {
-      const data = await api.getSession(sessionId);
+      const data = await api.getSession(sessionId, token ?? undefined);
       setSession(data);
       setError(null);
 
@@ -35,7 +36,7 @@ export function useSession(
     } finally {
       setLoading(false);
     }
-  }, [sessionId, stopOnActive]);
+  }, [sessionId, token, stopOnActive]);
 
   useEffect(() => {
     if (!sessionId) {

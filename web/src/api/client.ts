@@ -46,9 +46,13 @@ class ApiClient {
 
   /**
    * Get session status and credentials (if paid)
+   * Token is required for active/playing sessions to access credentials
    */
-  async getSession(sessionId: number): Promise<SessionResponse> {
-    return this.request<SessionResponse>(`/session/${sessionId}`);
+  async getSession(sessionId: number, token?: string): Promise<SessionResponse> {
+    const url = token
+      ? `/session/${sessionId}?token=${encodeURIComponent(token)}`
+      : `/session/${sessionId}`;
+    return this.request<SessionResponse>(url);
   }
 
   /**

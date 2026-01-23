@@ -1,4 +1,4 @@
-import { useParams, Link } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { useSession } from '@/hooks/useSession';
 import { StatusBadge } from '@/components/StatusBadge';
 import { CopyButton } from '@/components/CopyButton';
@@ -6,9 +6,11 @@ import { LoadingScreen } from '@/components/LoadingSpinner';
 
 export function SessionPage() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const [searchParams] = useSearchParams();
   const id = sessionId ? parseInt(sessionId, 10) : null;
+  const token = searchParams.get('token');
 
-  const { session, loading, error, refetch } = useSession(id, {
+  const { session, loading, error, refetch } = useSession(id, token, {
     pollInterval: 5000,
     stopOnActive: false, // Keep polling to show status updates
   });
@@ -29,10 +31,17 @@ export function SessionPage() {
   }
 
   if (error) {
+    const isAccessDenied = error.includes('access token') || error.includes('403');
     return (
       <div className="max-w-2xl mx-auto px-4 py-8 text-center">
-        <h1 className="font-pixel text-btc-orange text-sm mb-4">Session Not Found</h1>
-        <p className="text-gray-400 mb-6">{error}</p>
+        <h1 className="font-pixel text-btc-orange text-sm mb-4">
+          {isAccessDenied ? 'Access Denied' : 'Session Not Found'}
+        </h1>
+        <p className="text-gray-400 mb-6">
+          {isAccessDenied
+            ? 'This session requires an access token. Please use the link from your payment confirmation email.'
+            : error}
+        </p>
         <div className="flex gap-4 justify-center">
           <button onClick={refetch} className="btn-secondary text-xs">
             Retry
@@ -83,40 +92,57 @@ export function SessionPage() {
                 </p>
                 <p className="text-gray-400 text-xs">
                   {session.status === 'active'
-                    ? 'Connect via SSH to start your adventure'
+                    ? 'Play directly in your browser or connect via SSH'
                     : 'Your game is currently active'}
                 </p>
               </div>
 
-              {/* SSH Command */}
-              {session.ssh_command && (
-                <div className="bg-dark-bg border border-pixel-green/30 rounded p-4">
-                  <p className="text-xs text-gray-500 mb-2">SSH Command</p>
-                  <div className="flex items-center gap-2">
-                    <code className="text-pixel-green text-sm flex-1 font-mono">
-                      {session.ssh_command}
-                    </code>
-                    <CopyButton text={session.ssh_command} />
-                  </div>
-                </div>
+              {/* Play in Browser Button - Primary CTA */}
+              {token && (
+                <Link
+                  to={`/play/${session.id}?token=${encodeURIComponent(token)}`}
+                  className="block w-full py-4 px-6 bg-gradient-to-r from-btc-orange to-btc-gold text-dark-bg font-pixel text-sm text-center rounded-lg hover:opacity-90 transition-opacity shadow-lg shadow-btc-orange/20"
+                >
+                  Play in Browser
+                </Link>
               )}
 
-              {/* Credentials */}
-              <div className="grid grid-cols-2 gap-4">
-                <div className="bg-dark-bg border border-dark-border rounded p-3">
-                  <p className="text-xs text-gray-500 mb-1">Username</p>
-                  <div className="flex items-center gap-2">
-                    <code className="text-btc-orange text-sm">{session.username}</code>
-                    {session.username && <CopyButton text={session.username} label="Copy" />}
+              {/* SSH Alternative */}
+              <div className="border-t border-dark-border pt-4">
+                <p className="text-xs text-gray-500 mb-3 text-center">
+                  Or connect via SSH:
+                </p>
+
+                {/* SSH Command */}
+                {session.ssh_command && (
+                  <div className="bg-dark-bg border border-dark-border rounded p-4 mb-4">
+                    <p className="text-xs text-gray-500 mb-2">SSH Command</p>
+                    <div className="flex items-center gap-2">
+                      <code className="text-pixel-green text-sm flex-1 font-mono">
+                        {session.ssh_command}
+                      </code>
+                      <CopyButton text={session.ssh_command} />
+                    </div>
                   </div>
-                </div>
-                <div className="bg-dark-bg border border-dark-border rounded p-3">
-                  <p className="text-xs text-gray-500 mb-1">Password</p>
-                  <div className="flex items-center gap-2">
-                    <code className="text-btc-orange text-sm">
-                      {session.password?.slice(0, 8)}...
-                    </code>
-                    {session.password && <CopyButton text={session.password} label="Copy" />}
+                )}
+
+                {/* Credentials */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-dark-bg border border-dark-border rounded p-3">
+                    <p className="text-xs text-gray-500 mb-1">Username</p>
+                    <div className="flex items-center gap-2">
+                      <code className="text-btc-orange text-sm">{session.username}</code>
+                      {session.username && <CopyButton text={session.username} label="Copy" />}
+                    </div>
+                  </div>
+                  <div className="bg-dark-bg border border-dark-border rounded p-3">
+                    <p className="text-xs text-gray-500 mb-1">Password</p>
+                    <div className="flex items-center gap-2">
+                      <code className="text-btc-orange text-sm">
+                        {session.password?.slice(0, 8)}...
+                      </code>
+                      {session.password && <CopyButton text={session.password} label="Copy" />}
+                    </div>
                   </div>
                 </div>
               </div>
