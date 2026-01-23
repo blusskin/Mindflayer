@@ -14,6 +14,23 @@ Orange Nethack is a Bitcoin-powered Nethack server. Players pay a Lightning ante
 - When game ends: xlogfile entry contains UID -> matched to session
 - Character names are prompted on first SSH login and stored in `~/.nethack_name`
 
+### Per-User Nethack Directories
+Each player gets their own Nethack directory at `/var/games/nethack/users/<username>/`:
+- Avoids lock file conflicts between players
+- Bypasses Nethack's MAXPLAYERS limit (default 10)
+- Contains: `save/`, `perm`, `record`, `logfile`
+- Symlinks `xlogfile` to global `/var/games/nethack/xlogfile` (for game monitor)
+- Symlinks data files (`nhdat`, `symbols`, `license`) from `/usr/lib/games/nethack/`
+- Set via `NETHACKDIR` environment variable in shell script
+- Created by `UserManager._create_nethack_directory()` on user creation
+- Cleaned up by `UserManager._cleanup_nethack_directory()` on session end
+
+### Session Race Condition Prevention
+To prevent players from reconnecting after death (before cleanup):
+- Shell script writes session start time to `~/.session_start`
+- On reconnect, checks xlogfile for entries with `endtime > session_start`
+- If found, blocks reconnection with "game already ended" message
+
 ### Payment Flow
 1. Player submits Lightning address + email via web UI
 2. Strike API creates invoice, returned to player
@@ -27,26 +44,60 @@ Orange Nethack is a Bitcoin-powered Nethack server. Players pay a Lightning ante
 3. If ascended: `PayoutService` sends pot to player's Lightning address via Strike LNURL
 4. Session ended, Linux user deleted
 
+### Browser Terminal
+Players can play via browser instead of SSH client:
+- WebSocket endpoint at `/api/terminal/ws/{session_id}`
+- `SSHBridge` class spawns `su -l <username>` process
+- Uses asyncssh-style PTY for terminal emulation
+- xterm.js on frontend renders terminal
+- Disconnect sends SIGHUP for Nethack emergency save
+
 ## Important Files
 
 | File | Purpose |
 |------|---------|
 | `src/orange_nethack/api/routes.py` | API endpoints, session creation |
 | `src/orange_nethack/api/webhooks.py` | `confirm_payment()` - creates user on payment |
+| `src/orange_nethack/api/terminal.py` | WebSocket SSH bridge for browser terminal |
 | `src/orange_nethack/game/monitor.py` | Watches xlogfile, handles game end |
 | `src/orange_nethack/game/payout.py` | Sends pot to winner via Strike |
 | `src/orange_nethack/lightning/strike.py` | Strike API client (invoices, LNURL payments) |
 | `src/orange_nethack/database.py` | SQLite DB, session/game/pot operations |
-| `src/orange_nethack/users/manager.py` | Linux user creation/deletion |
+| `src/orange_nethack/users/manager.py` | Linux user creation/deletion, per-user directories |
 | `src/orange_nethack/cli.py` | Admin CLI commands |
-| `scripts/orange-shell.sh` | Custom SSH shell, prompts for character name |
-| `web/` | React frontend (Vite + TypeScript) |
+| `scripts/orange-shell.sh` | Custom SSH shell, session tracking, launches Nethack |
+| `web/src/components/Terminal.tsx` | xterm.js terminal component for browser play |
+| `web/src/pages/TerminalPage.tsx` | Browser terminal page |
+| `deploy/install.sh` | Bare metal deployment script for Debian 12 |
+| `deploy/DEPLOYMENT.md` | Production deployment guide |
 
 ## Database Schema
 
 - `pot` - Single row, tracks pot balance
 - `sessions` - Player sessions (username, password, linux_uid, lightning_address, email, status)
 - `games` - Game results (character_name, death_reason, score, turns, ascended, payout)
+
+## Production Directory Structure
+
+```
+/opt/orange-nethack/           # Application code
+├── .env                       # Configuration (sensitive!)
+├── .venv/                     # Python virtual environment
+├── src/                       # Source code
+├── web/dist/                  # Built frontend
+└── scripts/                   # Shell scripts
+
+/var/lib/orange-nethack/       # Application data
+└── db.sqlite                  # Database
+
+/var/games/nethack/            # Game files
+├── xlogfile                   # Global game results log
+└── users/                     # Per-user directories
+    └── nh_*/                  # Individual user game dirs
+        ├── save/              # Save files
+        ├── nhdat -> ...       # Symlink to system data
+        └── xlogfile -> ...    # Symlink to global xlogfile
+```
 
 ## Common Issues & Fixes
 
@@ -61,6 +112,22 @@ Database returns `None` for aggregates when no rows exist. Use `or 0` pattern.
 
 ### Docker API key
 Never commit API keys to docker-compose.yml. Use `.env` file instead.
+
+### Browser terminal not disconnecting
+When navigating away from terminal page, explicitly call `disconnect()` before navigation.
+The Terminal component exposes this via `forwardRef`/`useImperativeHandle`.
+
+### "Too many hacks running" error
+Caused by stale level files or lock conflicts. Per-user directories solve this.
+If it happens, clean up `/var/games/nethack/users/<username>/` directory.
+
+### Nethack "Cannot open dungeon description"
+Per-user directory missing data file symlinks. Ensure `nhdat`, `symbols`, `license`
+are symlinked from `/usr/lib/games/nethack/`.
+
+### UID recycling false positives
+Old xlogfile entries can match new sessions with same UID. Session start time
+tracking in `~/.session_start` prevents this by comparing timestamps.
 
 ## Testing
 
@@ -108,6 +175,14 @@ Key env vars:
 - `ANTE_SATS` - Cost to play (default: 1000)
 - `POT_INITIAL` - Starting pot (default: 0, purely player-funded)
 
+Email (Mailtrap transactional):
+- `SMTP_HOST` - `live.smtp.mailtrap.io` for production
+- `SMTP_PORT` - `587`
+- `SMTP_USER` - `api`
+- `SMTP_PASSWORD` - Mailtrap API token
+- `SMTP_FROM_EMAIL` - Must be verified domain in Mailtrap
+- `SMTP_USE_TLS` - `true`
+
 ## Strike Webhook Setup
 
 One-time setup for payment notifications:
@@ -117,10 +192,30 @@ orange-nethack-cli setup-strike-webhook https://your-domain.com/api/webhook/stri
 
 The webhook receives `invoice.updated` events when payments are received.
 
-## Deployment Checklist
+## Deployment
 
+### Bare Metal (Recommended for Production)
+See `deploy/DEPLOYMENT.md` for full guide. Quick start:
+```bash
+cd /opt
+git clone <repo> orange-nethack
+cd orange-nethack
+sudo ./deploy/install.sh
+# Edit /opt/orange-nethack/.env with production values
+sudo systemctl enable --now orange-nethack-api orange-nethack-monitor
+```
+
+The install script handles: system deps, user creation, Python venv, per-user
+Nethack directories, SSH config, systemd services, nginx, and sudo permissions.
+
+### Docker (Development/Testing)
+```bash
+docker-compose up -d
+```
+
+### Post-Deployment Checklist
 1. Set `STRIKE_API_KEY` and `MOCK_LIGHTNING=false` in `.env`
-2. Run `docker-compose up -d`
-3. Set up Strike webhook (one-time)
-4. Configure reverse proxy (nginx/Caddy) with HTTPS
-5. Open ports 22 (SSH) and 443 (HTTPS)
+2. Configure email (Mailtrap) settings in `.env`
+3. Set up SSL with certbot
+4. Set up Strike webhook: `orange-nethack-cli setup-strike-webhook https://domain.com/api/webhook/strike`
+5. Open ports: 22 (SSH), 80 (HTTP), 443 (HTTPS)
