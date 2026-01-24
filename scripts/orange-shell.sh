@@ -14,6 +14,9 @@ XLOGFILE="${XLOGFILE_PATH:-/var/games/nethack/xlogfile}"
 USER_NETHACK_DIR="/var/games/nethack/users/$USER"
 export NETHACKDIR="$USER_NETHACK_DIR"
 
+# Point Nethack to the user's config file in their game directory
+export NETHACKOPTIONS="$USER_NETHACK_DIR/.nethackrc"
+
 # Get current user's UID
 CURRENT_UID=$(id -u)
 

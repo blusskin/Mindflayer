@@ -173,9 +173,12 @@ class UserManager:
         - autopickup off (less accidental item grabbing for new players)
         - number_pad on (use numpad for movement)
         - playmode normal (no explore/wizard mode cheating)
+
+        The file is placed in the user's NETHACKDIR (not home) so we have
+        write permission. The shell script sets NETHACKOPTIONS to point to it.
         """
-        home_dir = Path(f"/home/{username}")
-        nethackrc = home_dir / ".nethackrc"
+        nethack_dir = Path(f"/var/games/nethack/users/{username}")
+        nethackrc = nethack_dir / ".nethackrc"
 
         nethackrc_content = """\
 # Orange Nethack default options
