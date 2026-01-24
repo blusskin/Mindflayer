@@ -245,9 +245,10 @@ async def cmd_test_flow() -> int:
     print(f"SMTP Configured: {settings.smtp_configured}")
     print()
 
-    # Use a fake UID for testing (in real usage, user creation sets this)
-    test_uid_1 = 10001
-    test_uid_2 = 10002
+    # Use random UIDs to avoid collisions with previous test runs
+    import random
+    test_uid_1 = random.randint(50000, 59999)
+    test_uid_2 = random.randint(60000, 69999)
 
     # Step 1: Check initial state
     print("Step 1: Initial state")
