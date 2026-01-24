@@ -182,6 +182,63 @@ export function LandingPage() {
               sessions are automatically cleaned up.
             </p>
           </details>
+
+          <details className="card group">
+            <summary className="cursor-pointer text-btc-gold font-pixel text-xs flex items-center justify-between">
+              Do I have a Lightning address?
+              <span className="text-btc-orange group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <div className="text-gray-400 text-sm mt-4 space-y-2">
+              <p>If you use any of these apps, you already have a Lightning address:</p>
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li><span className="text-btc-gold">Cash App</span> — yourname@cash.app (use your $cashtag)</li>
+                <li><span className="text-btc-gold">Strike</span> — yourname@strike.me</li>
+                <li><span className="text-btc-gold">Wallet of Satoshi</span> — yourname@walletofsatoshi.com</li>
+              </ul>
+              <p className="text-gray-500 text-xs mt-2">
+                Check your app's settings for "Lightning Address" or "Receive" options.
+              </p>
+            </div>
+          </details>
+
+          <details className="card group">
+            <summary className="cursor-pointer text-btc-gold font-pixel text-xs flex items-center justify-between">
+              Where can I learn more about Nethack?
+              <span className="text-btc-orange group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <div className="text-gray-400 text-sm mt-4 space-y-2">
+              <ul className="list-disc list-inside space-y-1 ml-2">
+                <li>
+                  <a href="https://nethackwiki.com" target="_blank" rel="noopener noreferrer" className="text-btc-gold hover:text-btc-orange transition-colors">
+                    NetHack Wiki
+                  </a> — Comprehensive guides and spoilers
+                </li>
+                <li>
+                  <a href="https://www.nethack.org" target="_blank" rel="noopener noreferrer" className="text-btc-gold hover:text-btc-orange transition-colors">
+                    nethack.org
+                  </a> — Official Nethack website
+                </li>
+                <li>
+                  <a href="https://www.reddit.com/r/nethack" target="_blank" rel="noopener noreferrer" className="text-btc-gold hover:text-btc-orange transition-colors">
+                    r/nethack
+                  </a> — Reddit community
+                </li>
+              </ul>
+            </div>
+          </details>
+
+          <details className="card group">
+            <summary className="cursor-pointer text-btc-gold font-pixel text-xs flex items-center justify-between">
+              How do I contact you?
+              <span className="text-btc-orange group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <p className="text-gray-400 text-sm mt-4">
+              Questions, feedback, or just want to say hi? Email us at{' '}
+              <a href="mailto:mindflayer@orangenethack.com" className="text-btc-gold hover:text-btc-orange transition-colors">
+                mindflayer@orangenethack.com
+              </a>
+            </p>
+          </details>
         </div>
       </section>
     </div>
