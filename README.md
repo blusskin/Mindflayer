@@ -107,6 +107,12 @@ orange-nethack-cli simulate-game --ascend <username>
 # Simulate with character details
 orange-nethack-cli simulate-game <username> --role Wiz --race Elf --conduct 0x222 --achieve 0xC00
 
+# Simulate payment confirmation (mock mode)
+orange-nethack-cli simulate-payment <session_id>
+
+# Run full integration test
+orange-nethack-cli test-flow
+
 # Set up Strike webhook
 orange-nethack-cli setup-strike-webhook https://yourdomain.com/api/webhook/payment
 ```
@@ -252,8 +258,47 @@ sudo chown root:orange-nethack /var/games/nethack/users
 sudo chmod 775 /var/games/nethack/users
 ```
 
+## Troubleshooting
+
+### Viewing Logs
+
+```bash
+# API server logs
+sudo journalctl -u orange-nethack-api -f
+
+# Game monitor logs
+sudo journalctl -u orange-nethack-monitor -f
+
+# Combined logs
+sudo journalctl -u 'orange-nethack-*' -f
+```
+
+### Common Issues
+
+**"Permission denied" on game start:**
+Check directory permissions (see Directory Permissions section above).
+
+**Strike webhook not working:**
+1. Verify the webhook URL ends with `/api/webhook/payment`
+2. Ensure your domain has valid SSL (Strike requires HTTPS)
+3. Check API logs: `sudo journalctl -u orange-nethack-api | grep webhook`
+
+**"Cannot open file xlogfile":**
+The xlogfile needs to be writable by the games group:
+```bash
+sudo chown root:games /var/games/nethack/xlogfile
+sudo chmod 664 /var/games/nethack/xlogfile
+```
+
+**Players getting "Too many hacks running":**
+Stale lock files in the user's game directory. Clean up or delete the user:
+```bash
+orange-nethack-cli delete-user <username>
+```
+
 ## Security Notes
 
+- Create a non-root admin user for server management (see `deploy/DEPLOYMENT.md`)
 - The game monitor service requires root to manage user accounts
 - Player accounts are isolated with a custom shell (can only run Nethack)
 - SSH access is restricted to the Nethack game only
