@@ -134,7 +134,7 @@ class XlogEntry(BaseModel):
             return False
         try:
             flags_int = int(self.flags, 16) if self.flags.startswith("0x") else int(self.flags)
-            return bool(flags_int & 0x1)  # Bit 0 = explore mode
+            return bool(flags_int & 0x2)  # Bit 1 = explore mode
         except (ValueError, TypeError):
             return False
 
@@ -145,7 +145,7 @@ class XlogEntry(BaseModel):
             return False
         try:
             flags_int = int(self.flags, 16) if self.flags.startswith("0x") else int(self.flags)
-            return bool(flags_int & 0x2)  # Bit 1 = wizard mode
+            return bool(flags_int & 0x1)  # Bit 0 = wizard mode
         except (ValueError, TypeError):
             return False
 
