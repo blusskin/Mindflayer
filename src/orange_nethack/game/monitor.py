@@ -65,7 +65,13 @@ class GameMonitor:
             logger.warning(f"Xlogfile entry has no UID: {entry.name}")
             return
 
-        logger.info(f"Game ended for UID {entry.uid} (character: {entry.name}): {entry.death} (score: {entry.score})")
+        # Check for explore mode or wizard mode (cheat modes)
+        is_cheated = entry.is_cheat_mode
+        if is_cheated:
+            mode = "wizard" if entry.is_wizard_mode else "explore"
+            logger.warning(f"Cheat mode ({mode}) game detected for UID {entry.uid} (character: {entry.name})")
+        else:
+            logger.info(f"Game ended for UID {entry.uid} (character: {entry.name}): {entry.death} (score: {entry.score})")
 
         # Find the session by Linux UID
         session = await db.get_session_by_uid(entry.uid)
@@ -80,11 +86,11 @@ class GameMonitor:
             logger.warning(f"Session {session['id']} has unexpected status: {session['status']}")
             return
 
-        # Handle ascension!
+        # Handle ascension (only for legitimate games, not cheat modes)
         payout_sats = None
         payout_hash = None
 
-        if entry.ascended:
+        if entry.ascended and not is_cheated:
             logger.info(f"ASCENSION! UID {entry.uid} (character: {entry.name}) has ascended!")
             payout_result = await self.payout_service.handle_ascension(session)
             if payout_result:
@@ -93,15 +99,22 @@ class GameMonitor:
                 logger.info(f"Payout of {payout_sats} sats sent to {session['lightning_address']}")
             else:
                 logger.error(f"Failed to send payout for ascension by UID {entry.uid}")
+        elif entry.ascended and is_cheated:
+            logger.warning(f"Cheat mode ascension by UID {entry.uid} - no payout!")
 
-        # Record game in database
+        # Record game in database (cheated games don't count as ascensions)
+        death_reason = entry.death
+        if is_cheated:
+            mode = "wizard" if entry.is_wizard_mode else "explore"
+            death_reason = f"[{mode.upper()} MODE] {entry.death}"
+
         await db.create_game(
             session_id=session["id"],
             character_name=entry.name,
-            death_reason=entry.death,
-            score=entry.score,
+            death_reason=death_reason,
+            score=entry.score if not is_cheated else 0,  # No score for cheaters
             turns=entry.turns,
-            ascended=entry.ascended,
+            ascended=entry.ascended and not is_cheated,  # Cheat ascensions don't count
             payout_sats=payout_sats,
             payout_hash=payout_hash,
         )

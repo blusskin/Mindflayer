@@ -126,3 +126,30 @@ class XlogEntry(BaseModel):
     @property
     def score(self) -> int:
         return self.points
+
+    @property
+    def is_explore_mode(self) -> bool:
+        """Check if game was played in explore (discover) mode."""
+        if not self.flags:
+            return False
+        try:
+            flags_int = int(self.flags, 16) if self.flags.startswith("0x") else int(self.flags)
+            return bool(flags_int & 0x1)  # Bit 0 = explore mode
+        except (ValueError, TypeError):
+            return False
+
+    @property
+    def is_wizard_mode(self) -> bool:
+        """Check if game was played in wizard (debug) mode."""
+        if not self.flags:
+            return False
+        try:
+            flags_int = int(self.flags, 16) if self.flags.startswith("0x") else int(self.flags)
+            return bool(flags_int & 0x2)  # Bit 1 = wizard mode
+        except (ValueError, TypeError):
+            return False
+
+    @property
+    def is_cheat_mode(self) -> bool:
+        """Check if game was played in any cheat mode (explore or wizard)."""
+        return self.is_explore_mode or self.is_wizard_mode
