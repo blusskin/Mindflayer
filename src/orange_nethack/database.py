@@ -366,6 +366,23 @@ class Database:
             row = await cursor.fetchone()
             return dict(row) if row else {}
 
+    async def delete_game(self, game_id: int) -> bool:
+        """Delete a game by ID. Returns True if deleted."""
+        async with self.connection() as db:
+            cursor = await db.execute("DELETE FROM games WHERE id = ?", (game_id,))
+            await db.commit()
+            return cursor.rowcount > 0
+
+    async def clear_games(self) -> int:
+        """Delete all games. Returns count of deleted games."""
+        async with self.connection() as db:
+            cursor = await db.execute("SELECT COUNT(*) as count FROM games")
+            row = await cursor.fetchone()
+            count = row["count"] if row else 0
+            await db.execute("DELETE FROM games")
+            await db.commit()
+            return count
+
 
 # Global database instance
 _db: Database | None = None

@@ -523,12 +523,12 @@ async def cmd_show_games(limit: int = 10) -> int:
         return 0
 
     print(f"Recent games ({len(games)}):")
-    print("-" * 100)
-    print(f"{'ID':<6} {'Username':<16} {'Score':<10} {'Ascended':<10} {'Death':<40}")
-    print("-" * 100)
+    print("-" * 130)
+    print(f"{'ID':<6} {'Username':<16} {'Score':<10} {'Ascended':<10} {'Death':<70}")
+    print("-" * 130)
 
     for g in games:
-        death = (g["death_reason"] or "")[:38]
+        death = (g["death_reason"] or "")[:68]
         ascended = "YES!" if g["ascended"] else "no"
         print(f"{g['id']:<6} {g['username']:<16} {g['score']:<10} {ascended:<10} {death}")
 
@@ -667,6 +667,55 @@ async def cmd_list_all_sessions(limit: int = 50) -> int:
     return 0
 
 
+async def cmd_delete_game(game_id: int) -> int:
+    """Delete a specific game from the leaderboard."""
+    await init_db()
+    db = get_db()
+
+    # First show the game being deleted
+    games = await db.get_recent_games(limit=100)
+    game = next((g for g in games if g["id"] == game_id), None)
+
+    if not game:
+        print(f"Error: Game {game_id} not found.")
+        return 1
+
+    print(f"Deleting game {game_id}:")
+    print(f"  Player: {game['username']}")
+    print(f"  Score: {game['score']:,}")
+    print(f"  Death: {game['death_reason']}")
+
+    deleted = await db.delete_game(game_id)
+    if deleted:
+        print("Game deleted.")
+        return 0
+    else:
+        print("Error: Failed to delete game.")
+        return 1
+
+
+async def cmd_clear_games(confirm: bool = False) -> int:
+    """Clear all games from the leaderboard."""
+    await init_db()
+    db = get_db()
+
+    stats = await db.get_stats()
+    total = stats.get("total_games") or 0
+
+    if total == 0:
+        print("No games to clear.")
+        return 0
+
+    if not confirm:
+        print(f"This will delete {total} games from the leaderboard.")
+        print("Run with --confirm to proceed.")
+        return 1
+
+    count = await db.clear_games()
+    print(f"Cleared {count} games from the leaderboard.")
+    return 0
+
+
 async def cmd_stats() -> int:
     """Show detailed server statistics."""
     await init_db()
@@ -704,7 +753,7 @@ async def cmd_stats() -> int:
     if recent_games:
         print("Recent Games:")
         for g in recent_games:
-            status = "ASCENDED" if g['ascended'] else g['death_reason'][:30] if g['death_reason'] else "unknown"
+            status = "ASCENDED" if g['ascended'] else g['death_reason'] if g['death_reason'] else "unknown"
             print(f"  - {g['username']}: {g['score']:,} pts - {status}")
 
     return 0
@@ -727,6 +776,8 @@ Admin Commands:
   reset-pot             Reset pot to initial value
   end-session           Force-end a session
   delete-user           Delete a Linux user
+  delete-game           Delete a game from the leaderboard
+  clear-games           Clear all games from the leaderboard
 
 Testing Commands:
   simulate-payment      Manually trigger payment confirmation for a session
@@ -741,6 +792,8 @@ Examples:
   %(prog)s set-pot 50000
   %(prog)s end-session 5
   %(prog)s delete-user nh_abc12345
+  %(prog)s delete-game 42
+  %(prog)s clear-games --confirm
   %(prog)s simulate-payment 1
   %(prog)s setup-strike-webhook https://your-server.com/api/webhook/payment
 """,
@@ -804,6 +857,14 @@ Examples:
     sp_delete_user = subparsers.add_parser("delete-user", help="Delete a Linux user")
     sp_delete_user.add_argument("username", help="Username to delete (e.g., nh_abc12345)")
 
+    # delete-game
+    sp_delete_game = subparsers.add_parser("delete-game", help="Delete a game from the leaderboard")
+    sp_delete_game.add_argument("game_id", type=int, help="Game ID to delete")
+
+    # clear-games
+    sp_clear_games = subparsers.add_parser("clear-games", help="Clear all games from the leaderboard")
+    sp_clear_games.add_argument("--confirm", action="store_true", help="Confirm clearing all games")
+
     # setup-strike-webhook
     sp_webhook = subparsers.add_parser("setup-strike-webhook", help="Register Strike webhook subscription")
     sp_webhook.add_argument("webhook_url", help="Your server's webhook URL (e.g., https://your-server.com/api/webhook/payment)")
@@ -855,6 +916,10 @@ Examples:
         return asyncio.run(cmd_end_session(session_id=args.session_id))
     elif args.command == "delete-user":
         return asyncio.run(cmd_delete_user(username=args.username))
+    elif args.command == "delete-game":
+        return asyncio.run(cmd_delete_game(game_id=args.game_id))
+    elif args.command == "clear-games":
+        return asyncio.run(cmd_clear_games(confirm=args.confirm))
     elif args.command == "setup-strike-webhook":
         return asyncio.run(cmd_setup_strike_webhook(webhook_url=args.webhook_url))
     else:
