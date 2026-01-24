@@ -1,6 +1,8 @@
 import { useStats } from '@/hooks/useStats';
 import { PotDisplay } from '@/components/PotDisplay';
 import { LoadingScreen } from '@/components/LoadingSpinner';
+import { ConductIcons } from '@/components/ConductIcons';
+import { AchievementIcons } from '@/components/AchievementIcons';
 import type { GameResult } from '@/types/api';
 
 function formatDate(dateStr: string): string {
@@ -22,11 +24,23 @@ function formatDeathReason(reason: string | null): string {
   return reason;
 }
 
+function formatClassRace(game: GameResult): string {
+  const role = game.role || '?';
+  const race = game.race || '?';
+  return `${role}-${race}`;
+}
+
 function GameRow({ game, showPayout = false }: { game: GameResult; showPayout?: boolean }) {
   return (
     <tr>
       <td className="text-btc-orange">{game.username}</td>
+      <td className="text-gray-400 text-xs hidden md:table-cell">
+        {formatClassRace(game)}
+      </td>
       <td className="text-btc-gold tabular-nums">{game.score.toLocaleString()}</td>
+      <td className="text-gray-500 text-xs tabular-nums hidden md:table-cell">
+        {game.deathlev ?? '-'}
+      </td>
       <td className="text-gray-400 text-xs hidden sm:table-cell">
         {game.ascended ? (
           <span className="text-pixel-green">Ascended!</span>
@@ -34,8 +48,11 @@ function GameRow({ game, showPayout = false }: { game: GameResult; showPayout?: 
           formatDeathReason(game.death_reason)
         )}
       </td>
-      <td className="text-gray-500 text-xs tabular-nums hidden md:table-cell">
-        {game.turns.toLocaleString()}
+      <td className="hidden md:table-cell">
+        <span className="inline-flex gap-1">
+          <ConductIcons conduct={game.conduct} />
+          <AchievementIcons achieve={game.achieve} />
+        </span>
       </td>
       {showPayout && (
         <td className="text-pixel-green tabular-nums">
@@ -68,7 +85,7 @@ export function StatsPage() {
   if (!stats) return null;
 
   return (
-    <div className="max-w-4xl mx-auto px-4 py-8">
+    <div className="max-w-6xl mx-auto px-4 py-8">
       {/* Header */}
       <div className="text-center mb-8">
         <h1 className="font-pixel text-btc-orange text-lg mb-4">Leaderboard</h1>
@@ -110,9 +127,11 @@ export function StatsPage() {
               <thead>
                 <tr>
                   <th>Player</th>
+                  <th className="hidden md:table-cell">Class</th>
                   <th>Score</th>
+                  <th className="hidden md:table-cell">Lvl</th>
                   <th className="hidden sm:table-cell">Result</th>
-                  <th className="hidden md:table-cell">Turns</th>
+                  <th className="hidden md:table-cell">Badges</th>
                   <th>Payout</th>
                   <th>Date</th>
                 </tr>
@@ -140,9 +159,11 @@ export function StatsPage() {
               <thead>
                 <tr>
                   <th>Player</th>
+                  <th className="hidden md:table-cell">Class</th>
                   <th>Score</th>
+                  <th className="hidden md:table-cell">Lvl</th>
                   <th className="hidden sm:table-cell">Death</th>
-                  <th className="hidden md:table-cell">Turns</th>
+                  <th className="hidden md:table-cell">Badges</th>
                   <th>Date</th>
                 </tr>
               </thead>
@@ -169,9 +190,11 @@ export function StatsPage() {
               <thead>
                 <tr>
                   <th>Player</th>
+                  <th className="hidden md:table-cell">Class</th>
                   <th>Score</th>
+                  <th className="hidden md:table-cell">Lvl</th>
                   <th className="hidden sm:table-cell">Death</th>
-                  <th className="hidden md:table-cell">Turns</th>
+                  <th className="hidden md:table-cell">Badges</th>
                   <th>Date</th>
                 </tr>
               </thead>

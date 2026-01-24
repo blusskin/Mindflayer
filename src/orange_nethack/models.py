@@ -60,6 +60,16 @@ class GameResult(BaseModel):
     ascended: bool
     payout_sats: int | None
     ended_at: datetime
+    # Enhanced leaderboard fields
+    role: str | None = None
+    race: str | None = None
+    gender: str | None = None
+    align: str | None = None
+    deathlev: int | None = None
+    hp: int | None = None
+    maxhp: int | None = None
+    conduct: str | None = None
+    achieve: str | None = None
 
 
 class StatsResponse(BaseModel):

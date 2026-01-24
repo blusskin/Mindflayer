@@ -94,12 +94,32 @@ class Database:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_access_token ON sessions(access_token)"
         )
 
-        # Migrate games table - add character_name column
+        # Migrate games table
         cursor = await db.execute("PRAGMA table_info(games)")
         game_columns = {row[1] for row in await cursor.fetchall()}
 
         if "character_name" not in game_columns:
             await db.execute("ALTER TABLE games ADD COLUMN character_name TEXT")
+
+        # Enhanced leaderboard fields
+        if "role" not in game_columns:
+            await db.execute("ALTER TABLE games ADD COLUMN role TEXT")
+        if "race" not in game_columns:
+            await db.execute("ALTER TABLE games ADD COLUMN race TEXT")
+        if "gender" not in game_columns:
+            await db.execute("ALTER TABLE games ADD COLUMN gender TEXT")
+        if "align" not in game_columns:
+            await db.execute("ALTER TABLE games ADD COLUMN align TEXT")
+        if "deathlev" not in game_columns:
+            await db.execute("ALTER TABLE games ADD COLUMN deathlev INTEGER")
+        if "hp" not in game_columns:
+            await db.execute("ALTER TABLE games ADD COLUMN hp INTEGER")
+        if "maxhp" not in game_columns:
+            await db.execute("ALTER TABLE games ADD COLUMN maxhp INTEGER")
+        if "conduct" not in game_columns:
+            await db.execute("ALTER TABLE games ADD COLUMN conduct TEXT")
+        if "achieve" not in game_columns:
+            await db.execute("ALTER TABLE games ADD COLUMN achieve TEXT")
 
     @asynccontextmanager
     async def connection(self) -> AsyncGenerator[aiosqlite.Connection, None]:
@@ -261,15 +281,26 @@ class Database:
         ascended: bool,
         payout_sats: int | None = None,
         payout_hash: str | None = None,
+        role: str | None = None,
+        race: str | None = None,
+        gender: str | None = None,
+        align: str | None = None,
+        deathlev: int | None = None,
+        hp: int | None = None,
+        maxhp: int | None = None,
+        conduct: str | None = None,
+        achieve: str | None = None,
     ) -> int:
         async with self.connection() as db:
             cursor = await db.execute(
                 """
                 INSERT INTO games
-                (session_id, character_name, death_reason, score, turns, ascended, payout_sats, payout_hash)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (session_id, character_name, death_reason, score, turns, ascended, payout_sats, payout_hash,
+                 role, race, gender, align, deathlev, hp, maxhp, conduct, achieve)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (session_id, character_name, death_reason, score, turns, ascended, payout_sats, payout_hash),
+                (session_id, character_name, death_reason, score, turns, ascended, payout_sats, payout_hash,
+                 role, race, gender, align, deathlev, hp, maxhp, conduct, achieve),
             )
             await db.commit()
             return cursor.lastrowid

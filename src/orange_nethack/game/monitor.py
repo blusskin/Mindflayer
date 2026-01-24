@@ -117,6 +117,15 @@ class GameMonitor:
             ascended=entry.ascended and not is_cheated,  # Cheat ascensions don't count
             payout_sats=payout_sats,
             payout_hash=payout_hash,
+            role=entry.role,
+            race=entry.race,
+            gender=entry.gender,
+            align=entry.align,
+            deathlev=entry.deathlev,
+            hp=entry.hp,
+            maxhp=entry.maxhp,
+            conduct=entry.conduct,
+            achieve=entry.achieve,
         )
 
         # Mark session as ended

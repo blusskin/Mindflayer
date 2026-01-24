@@ -177,6 +177,15 @@ async def get_stats():
             ascended=bool(g["ascended"]),
             payout_sats=g["payout_sats"],
             ended_at=datetime.fromisoformat(g["ended_at"]) if g["ended_at"] else datetime.utcnow(),
+            role=g.get("role"),
+            race=g.get("race"),
+            gender=g.get("gender"),
+            align=g.get("align"),
+            deathlev=g.get("deathlev"),
+            hp=g.get("hp"),
+            maxhp=g.get("maxhp"),
+            conduct=g.get("conduct"),
+            achieve=g.get("achieve"),
         )
 
     return StatsResponse(

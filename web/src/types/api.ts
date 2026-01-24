@@ -47,6 +47,16 @@ export interface GameResult {
   ascended: boolean;
   payout_sats: number | null;
   ended_at: string;
+  // Enhanced leaderboard fields
+  role: string | null;
+  race: string | null;
+  gender: string | null;
+  align: string | null;
+  deathlev: number | null;
+  hp: number | null;
+  maxhp: number | null;
+  conduct: string | null;
+  achieve: string | null;
 }
 
 export interface StatsResponse {

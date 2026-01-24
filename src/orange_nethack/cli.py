@@ -52,6 +52,11 @@ def format_xlog_entry(
     race: str = "Hum",
     gender: str = "Fem",
     align: str = "Neu",
+    deathlev: int = 1,
+    hp: int = -1,
+    maxhp: int = 12,
+    conduct: str = "0x0",
+    achieve: str = "0x0",
 ) -> str:
     """Format an xlogfile entry line."""
     now = int(time.time())
@@ -61,10 +66,10 @@ def format_xlog_entry(
         f"version=3.6.6",
         f"points={score}",
         f"deathdnum=0",
-        f"deathlev=1",
-        f"maxlvl=1",
-        f"hp=-1",
-        f"maxhp=12",
+        f"deathlev={deathlev}",
+        f"maxlvl={deathlev}",
+        f"hp={hp}",
+        f"maxhp={maxhp}",
         f"deaths=1",
         f"deathdate={date}",
         f"birthdate={date}",
@@ -75,9 +80,9 @@ def format_xlog_entry(
         f"align={align}",
         f"name={name}",
         f"death={death}",
-        f"conduct=0x0",
+        f"conduct={conduct}",
         f"turns={turns}",
-        f"achieve=0x0",
+        f"achieve={achieve}",
         f"realtime={turns * 2}",
         f"starttime={now - turns * 2}",
         f"endtime={now}",
@@ -116,6 +121,15 @@ async def cmd_simulate_game(
     ascend: bool = False,
     score: int = 100,
     death: str | None = None,
+    role: str = "Val",
+    race: str = "Hum",
+    gender: str = "Fem",
+    align: str = "Neu",
+    deathlev: int = 1,
+    hp: int = -1,
+    maxhp: int = 12,
+    conduct: str = "0x0",
+    achieve: str = "0x0",
 ) -> int:
     """Simulate a game completion by appending to xlogfile."""
     await init_db()
@@ -126,12 +140,21 @@ async def cmd_simulate_game(
         death_msg = "ascended to demigod-hood"
         if score < 1000:
             score = 50000  # Reasonable ascension score
+        # Set reasonable ascension values
+        deathlev = 0  # Ascended from Astral
+        hp = maxhp  # Full HP on ascension
+        # Add some achievements for ascension (Bell + Candelabrum + Book + Invocation + Amulet + Planes + Astral + Ascended)
+        if achieve == "0x0":
+            achieve = "0xFF"  # All major achievements
     else:
         death_msg = death or "killed by a goblin"
 
     print(f"Simulating game for {username}...")
     print(f"  Death: {death_msg}")
     print(f"  Score: {score}")
+    print(f"  Class: {role}-{race} {gender[0]}/{align[0]}")
+    print(f"  Level: {deathlev}, HP: {hp}/{maxhp}")
+    print(f"  Conduct: {conduct}, Achieve: {achieve}")
     print(f"  Ascended: {ascend}")
 
     # Check if user has an active session and get the UID
@@ -159,6 +182,15 @@ async def cmd_simulate_game(
         death=death_msg,
         score=score,
         uid=linux_uid,
+        role=role,
+        race=race,
+        gender=gender,
+        align=align,
+        deathlev=deathlev,
+        hp=hp,
+        maxhp=maxhp,
+        conduct=conduct,
+        achieve=achieve,
     )
 
     # Append to xlogfile
@@ -299,6 +331,15 @@ async def cmd_test_flow() -> int:
         death="killed by a test goblin",
         score=1234,
         uid=test_uid_1,
+        role="Bar",
+        race="Hum",
+        gender="Mal",
+        align="Neu",
+        deathlev=5,
+        hp=-3,
+        maxhp=24,
+        conduct="0x4",  # Vegetarian
+        achieve="0xC00",  # Mines End + Sokoban
     )
     xlogfile_path.parent.mkdir(parents=True, exist_ok=True)
     with open(xlogfile_path, "a") as f:
@@ -378,6 +419,15 @@ async def cmd_test_flow() -> int:
         death="ascended to demigod-hood",
         score=999999,
         uid=test_uid_2,
+        role="Wiz",
+        race="Elf",
+        gender="Mal",
+        align="Cha",
+        deathlev=0,  # Astral
+        hp=150,
+        maxhp=150,
+        conduct="0x222",  # Vegan + Polypileless + Wishless
+        achieve="0xFFF",  # All achievements
     )
     with open(xlogfile_path, "a") as f:
         f.write(entry2)
@@ -708,6 +758,15 @@ Examples:
     sp_game.add_argument("--ascend", action="store_true", help="Player ascended (wins pot)")
     sp_game.add_argument("--score", type=int, default=100, help="Game score (default: 100)")
     sp_game.add_argument("--death", type=str, help="Death reason (default: 'killed by a goblin')")
+    sp_game.add_argument("--role", type=str, default="Val", help="Role/class (Val, Wiz, etc.)")
+    sp_game.add_argument("--race", type=str, default="Hum", help="Race (Hum, Elf, Dwa, etc.)")
+    sp_game.add_argument("--gender", type=str, default="Fem", help="Gender (Fem, Mal)")
+    sp_game.add_argument("--align", type=str, default="Neu", help="Alignment (Law, Neu, Cha)")
+    sp_game.add_argument("--deathlev", type=int, default=1, help="Death level")
+    sp_game.add_argument("--hp", type=int, default=-1, help="HP at death")
+    sp_game.add_argument("--maxhp", type=int, default=12, help="Max HP")
+    sp_game.add_argument("--conduct", type=str, default="0x0", help="Conduct bits (hex, e.g. 0x220 for vegan+wishless)")
+    sp_game.add_argument("--achieve", type=str, default="0x0", help="Achievement bits (hex, e.g. 0xC00 for mines+sokoban)")
 
     # test-flow
     subparsers.add_parser("test-flow", help="Run complete automated test")
@@ -765,6 +824,15 @@ Examples:
                 ascend=args.ascend,
                 score=args.score,
                 death=args.death,
+                role=args.role,
+                race=args.race,
+                gender=args.gender,
+                align=args.align,
+                deathlev=args.deathlev,
+                hp=args.hp,
+                maxhp=args.maxhp,
+                conduct=args.conduct,
+                achieve=args.achieve,
             )
         )
     elif args.command == "test-flow":
