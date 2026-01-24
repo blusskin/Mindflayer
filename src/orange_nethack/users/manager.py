@@ -196,8 +196,6 @@ OPTIONS=playmode:normal
 # Show elapsed game time
 OPTIONS=time
 
-# Highlight pets and piles of items
-OPTIONS=hilite_pet,hilite_pile
 """
         try:
             nethackrc.write_text(nethackrc_content)
