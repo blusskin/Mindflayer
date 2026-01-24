@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { Terminal, TerminalHandle } from '@/components/Terminal';
 
@@ -44,18 +44,18 @@ export function TerminalPage() {
     );
   }
 
-  const handleConnect = () => {
+  const handleConnect = useCallback(() => {
     setStatus('connected');
-  };
+  }, []);
 
-  const handleDisconnect = () => {
+  const handleDisconnect = useCallback(() => {
     setStatus('disconnected');
-  };
+  }, []);
 
-  const handleError = (errorMsg: string) => {
+  const handleError = useCallback((errorMsg: string) => {
     setError(errorMsg);
     setStatus('error');
-  };
+  }, []);
 
   const handleBack = () => {
     // Disconnect SSH before navigating to avoid lingering connections
