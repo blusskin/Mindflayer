@@ -484,14 +484,16 @@ async def cmd_show_sessions() -> int:
         return 0
 
     print(f"Active sessions ({len(sessions)}):")
-    print("-" * 80)
-    print(f"{'ID':<6} {'Username':<16} {'Status':<10} {'Ante':<8} {'Created':<20}")
-    print("-" * 80)
+    print("-" * 140)
+    print(f"{'ID':<6} {'Username':<16} {'Status':<10} {'Email':<30} {'Lightning':<40} {'Created':<20}")
+    print("-" * 140)
 
     for s in sessions:
+        email = (s.get('email') or '-')[:28]
+        lightning = (s.get('lightning_address') or '-')[:38]
         print(
             f"{s['id']:<6} {s['username']:<16} {s['status']:<10} "
-            f"{s['ante_sats']:<8} {s['created_at'][:19]}"
+            f"{email:<30} {lightning:<40} {s['created_at'][:19]}"
         )
 
     return 0
@@ -653,15 +655,16 @@ async def cmd_list_all_sessions(limit: int = 50) -> int:
         return 0
 
     print(f"All sessions (showing up to {limit}):")
-    print("-" * 100)
-    print(f"{'ID':<6} {'Username':<16} {'Status':<10} {'Ante':<8} {'UID':<8} {'Created':<20}")
-    print("-" * 100)
+    print("-" * 150)
+    print(f"{'ID':<6} {'Username':<16} {'Status':<10} {'Email':<30} {'Lightning':<40} {'Created':<20}")
+    print("-" * 150)
 
     for s in sessions:
-        uid = s.get('linux_uid') or '-'
+        email = (s.get('email') or '-')[:28]
+        lightning = (s.get('lightning_address') or '-')[:38]
         print(
             f"{s['id']:<6} {s['username']:<16} {s['status']:<10} "
-            f"{s['ante_sats']:<8} {str(uid):<8} {s['created_at'][:19]}"
+            f"{email:<30} {lightning:<40} {s['created_at'][:19]}"
         )
 
     return 0
