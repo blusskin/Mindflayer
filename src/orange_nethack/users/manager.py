@@ -117,6 +117,9 @@ class UserManager:
         # Create per-user Nethack directory
         await self._create_nethack_directory(username)
 
+        # Create default .nethackrc with server options
+        await self._create_nethackrc(username)
+
         logger.info(f"Created user {username} with UID {uid}")
         return uid
 
@@ -162,6 +165,47 @@ class UserManager:
             logger.info(f"Created Nethack directory for {username}: {nethack_dir}")
         except Exception as e:
             logger.error(f"Failed to create Nethack directory for {username}: {e}")
+
+    async def _create_nethackrc(self, username: str) -> None:
+        """Create a default .nethackrc file with server options.
+
+        Sets:
+        - autopickup off (less accidental item grabbing for new players)
+        - number_pad on (use numpad for movement)
+        - playmode normal (no explore/wizard mode cheating)
+        """
+        home_dir = Path(f"/home/{username}")
+        nethackrc = home_dir / ".nethackrc"
+
+        nethackrc_content = """\
+# Orange Nethack default options
+# You can customize these by editing this file
+
+# Disable autopickup - pick up items manually with ','
+OPTIONS=!autopickup
+
+# Use number pad for movement (8=up, 2=down, 4=left, 6=right, etc.)
+OPTIONS=number_pad:1
+
+# Normal play mode only (no explore/wizard mode)
+OPTIONS=playmode:normal
+
+# Show elapsed game time
+OPTIONS=time
+
+# Highlight pets and piles of items
+OPTIONS=hilite_pet,hilite_pile
+"""
+        try:
+            nethackrc.write_text(nethackrc_content)
+            # Set ownership to the user
+            await self._run_command(
+                "chown", f"{username}:{self.settings.nethack_group}",
+                str(nethackrc), use_sudo=True
+            )
+            logger.info(f"Created .nethackrc for {username}")
+        except Exception as e:
+            logger.warning(f"Failed to create .nethackrc for {username}: {e}")
 
     async def _write_character_name(self, username: str, character_name: str) -> None:
         """Write the character name to the user's home directory."""
