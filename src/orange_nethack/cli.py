@@ -828,13 +828,13 @@ Examples:
     subparsers.add_parser("test-flow", help="Run complete automated test")
 
     # show-sessions
-    subparsers.add_parser("show-sessions", help="Show active sessions")
+    subparsers.add_parser("show-sessions", aliases=["sessions"], help="Show active sessions")
 
     # show-pot
-    subparsers.add_parser("show-pot", help="Show current pot balance")
+    subparsers.add_parser("show-pot", aliases=["pot"], help="Show current pot balance")
 
     # show-games
-    sp_games = subparsers.add_parser("show-games", help="Show recent games")
+    sp_games = subparsers.add_parser("show-games", aliases=["games"], help="Show recent games")
     sp_games.add_argument("--limit", type=int, default=10, help="Number of games to show")
 
     # stats
@@ -901,11 +901,11 @@ Examples:
         )
     elif args.command == "test-flow":
         return asyncio.run(cmd_test_flow())
-    elif args.command == "show-sessions":
+    elif args.command in ("show-sessions", "sessions"):
         return asyncio.run(cmd_show_sessions())
-    elif args.command == "show-pot":
+    elif args.command in ("show-pot", "pot"):
         return asyncio.run(cmd_show_pot())
-    elif args.command == "show-games":
+    elif args.command in ("show-games", "games"):
         return asyncio.run(cmd_show_games(limit=args.limit))
     elif args.command == "stats":
         return asyncio.run(cmd_stats())
