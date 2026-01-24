@@ -76,19 +76,24 @@ log "Creating directory structure..."
 
 # Application data directory
 mkdir -p "$DATA_DIR"
-chown "$APP_USER:$APP_USER" "$DATA_DIR"
-chmod 755 "$DATA_DIR"
+chown root:"$APP_USER" "$DATA_DIR"
+chmod 770 "$DATA_DIR"
 
 # Nethack game directories
+# Players need to traverse /var/games/nethack to reach their user dir
+# API (orange-nethack) needs to create dirs in /var/games/nethack/users
 mkdir -p "$GAMES_DIR"/{save,dumps,recordings,users}
-chown -R root:"$NETHACK_GROUP" "$GAMES_DIR"
-chmod 775 "$GAMES_DIR"
-chmod 777 "$GAMES_DIR/recordings"
-chmod 775 "$GAMES_DIR/users"
+chown root:"$NETHACK_GROUP" "$GAMES_DIR"
+chmod 755 "$GAMES_DIR"  # Players need to traverse this
 
-# Create xlogfile
+chown root:"$APP_USER" "$GAMES_DIR/users"
+chmod 775 "$GAMES_DIR/users"  # API creates user dirs here
+
+chmod 777 "$GAMES_DIR/recordings"
+
+# Create xlogfile - players write game results here
 touch "$GAMES_DIR/xlogfile"
-chown "$NETHACK_GROUP:$NETHACK_GROUP" "$GAMES_DIR/xlogfile"
+chown root:"$NETHACK_GROUP" "$GAMES_DIR/xlogfile"
 chmod 664 "$GAMES_DIR/xlogfile"
 
 # Create other nethack files
@@ -137,6 +142,9 @@ chmod +x /usr/local/bin/orange-shell.sh
 if ! grep -q "orange-shell.sh" /etc/shells; then
     echo "/usr/local/bin/orange-shell.sh" >> /etc/shells
 fi
+
+# Create symlink for CLI access from anywhere
+ln -sf "$VENV_DIR/bin/orange-nethack-cli" /usr/local/bin/orange-nethack-cli
 
 # Step 7: Configure SSH
 log "Configuring SSH..."
@@ -188,8 +196,8 @@ NETHACK_USER_PREFIX=nh_
 NETHACK_GROUP=games
 MAX_ACTIVE_SESSIONS=100
 EOF
-    chown "$APP_USER:$APP_USER" "$ENV_FILE"
-    chmod 600 "$ENV_FILE"
+    chown root:"$APP_USER" "$ENV_FILE"
+    chmod 640 "$ENV_FILE"
     warn "Created $ENV_FILE - YOU MUST EDIT THIS FILE with your production values!"
 fi
 
@@ -325,7 +333,7 @@ echo "   sudo systemctl enable --now orange-nethack-api"
 echo "   sudo systemctl enable --now orange-nethack-monitor"
 echo ""
 echo "5. Set up the Strike webhook (after services are running):"
-echo "   sudo -u $APP_USER $VENV_DIR/bin/orange-nethack-cli setup-strike-webhook https://yourdomain.com/api/webhook/strike"
+echo "   sudo -u $APP_USER $VENV_DIR/bin/orange-nethack-cli setup-strike-webhook https://yourdomain.com/api/webhook/payment"
 echo ""
 echo "6. Configure firewall (if using ufw):"
 echo "   sudo ufw allow 22/tcp   # SSH for game"

@@ -52,8 +52,7 @@ This guide covers deploying Orange Nethack to a bare metal Debian 12 server (e.g
 
 8. **Set up Strike webhook:**
    ```bash
-   sudo -u orange-nethack /opt/orange-nethack/.venv/bin/orange-nethack-cli \
-       setup-strike-webhook https://yourdomain.com/api/webhook/strike
+   orange-nethack-cli setup-strike-webhook https://yourdomain.com/api/webhook/payment
    ```
 
 9. **Configure firewall:**
@@ -130,20 +129,38 @@ sudo systemctl stop orange-nethack-monitor
 
 ## CLI Commands
 
-Run CLI commands as the orange-nethack user:
+The `orange-nethack-cli` command is available globally after installation:
 
 ```bash
-# Show active sessions
-sudo -u orange-nethack /opt/orange-nethack/.venv/bin/orange-nethack-cli show-sessions
+# Show server statistics
+orange-nethack-cli stats
 
-# Show pot balance
-sudo -u orange-nethack /opt/orange-nethack/.venv/bin/orange-nethack-cli show-pot
+# Show pot balance (alias: pot)
+orange-nethack-cli pot
 
-# Show game statistics
-sudo -u orange-nethack /opt/orange-nethack/.venv/bin/orange-nethack-cli stats
+# Set pot to specific amount
+orange-nethack-cli set-pot 50000
 
-# Show recent games
-sudo -u orange-nethack /opt/orange-nethack/.venv/bin/orange-nethack-cli show-games
+# Show active sessions (alias: sessions)
+orange-nethack-cli sessions
+
+# Show all sessions including ended
+orange-nethack-cli list-all-sessions
+
+# Show recent games (alias: games)
+orange-nethack-cli games
+
+# Delete a game from leaderboard
+orange-nethack-cli delete-game <game_id>
+
+# Clear all games (requires --confirm)
+orange-nethack-cli clear-games --confirm
+
+# End a session manually
+orange-nethack-cli end-session <session_id>
+
+# Delete a Linux user (requires sudo)
+sudo orange-nethack-cli delete-user <username>
 ```
 
 ## Directory Structure
@@ -221,9 +238,9 @@ Ensure nginx is configured for WebSocket upgrades and the proxy timeout is set h
 
 ### Strike webhook not working
 
-1. Verify webhook is set up:
+1. Verify webhook URL is correct (`/api/webhook/payment`, NOT `/api/webhook/strike`):
    ```bash
-   sudo -u orange-nethack /opt/orange-nethack/.venv/bin/orange-nethack-cli setup-strike-webhook https://yourdomain.com/api/webhook/strike
+   orange-nethack-cli setup-strike-webhook https://yourdomain.com/api/webhook/payment
    ```
 
 2. Check that your domain has valid SSL (Strike requires HTTPS)
@@ -233,12 +250,35 @@ Ensure nginx is configured for WebSocket upgrades and the proxy timeout is set h
    sudo journalctl -u orange-nethack-api | grep webhook
    ```
 
+4. If you see 405 errors for `/api/webhook/strike`, you registered the wrong URL - rerun step 1
+
+## Admin User Setup (Recommended)
+
+Instead of logging in as root, create an admin user with sudo access:
+
+```bash
+# As root, create your admin user
+adduser yourusername
+usermod -aG sudo yourusername
+usermod -aG orange-nethack yourusername
+
+# Set up SSH key auth from your local machine
+ssh-copy-id yourusername@yourserver
+
+# Disable root SSH login (edit /etc/ssh/sshd_config)
+# Set: PermitRootLogin no
+sudo systemctl restart sshd
+```
+
+Adding yourself to the `orange-nethack` group allows running CLI commands without sudo.
+
 ## Security Notes
 
-- The `.env` file contains sensitive API keys - ensure it's only readable by the app user
+- The `.env` file contains sensitive API keys - only readable by root and orange-nethack group
 - Game users (nh_*) have restricted shells and can only play Nethack
 - The orange-nethack user has limited sudo access only for user management commands
 - All web traffic should go through HTTPS (enforced by nginx after certbot setup)
+- Avoid logging in as root - use an admin user with sudo instead
 
 ## Backup
 

@@ -13,6 +13,16 @@ Bitcoin-themed Nethack server where players pay a Lightning ante to play, with t
 
 The pot starts at 0 and is purely player-funded.
 
+## Features
+
+- **Lightning payments** via Strike API
+- **Browser terminal** - play directly in the web UI via WebSocket
+- **SSH access** - traditional SSH connection for terminal purists
+- **Enhanced leaderboard** with character class, race, death level, and achievement badges
+- **Conduct tracking** - displays badges for pacifist, vegan, wishless, and other conducts
+- **Email notifications** - payment confirmation and game results
+- **Anti-cheat** - explore/wizard mode games are detected and don't count
+
 ## Quick Start (Docker)
 
 The easiest way to run Orange Nethack is with Docker:
@@ -47,8 +57,10 @@ The server will be available at `http://localhost:8000` with:
 3. Set up a webhook subscription (one-time):
 
 ```bash
-docker exec -it orange-nethack orange-nethack-cli setup-strike-webhook https://your-domain.com/api/webhook/strike
+docker exec -it orange-nethack orange-nethack-cli setup-strike-webhook https://your-domain.com/api/webhook/payment
 ```
+
+**Note:** The webhook URL must be `/api/webhook/payment` (not `/api/webhook/strike`).
 
 ## CLI Commands
 
@@ -58,8 +70,8 @@ The `orange-nethack-cli` tool provides admin commands:
 # Show server statistics
 orange-nethack-cli stats
 
-# Show current pot balance
-orange-nethack-cli show-pot
+# Show current pot balance (alias: pot)
+orange-nethack-cli pot
 
 # Set pot to specific amount
 orange-nethack-cli set-pot 50000
@@ -67,11 +79,20 @@ orange-nethack-cli set-pot 50000
 # Reset pot to initial (0)
 orange-nethack-cli reset-pot
 
-# List active sessions
-orange-nethack-cli show-sessions
+# List active sessions (alias: sessions)
+orange-nethack-cli sessions
 
 # List all sessions (including ended)
 orange-nethack-cli list-all-sessions
+
+# Show recent games (alias: games)
+orange-nethack-cli games
+
+# Delete a game from leaderboard
+orange-nethack-cli delete-game <game_id>
+
+# Clear all games from leaderboard
+orange-nethack-cli clear-games --confirm
 
 # End a session manually
 orange-nethack-cli end-session <session_id>
@@ -83,8 +104,11 @@ orange-nethack-cli delete-user <username>
 orange-nethack-cli simulate-game <username>
 orange-nethack-cli simulate-game --ascend <username>
 
+# Simulate with character details
+orange-nethack-cli simulate-game <username> --role Wiz --race Elf --conduct 0x222 --achieve 0xC00
+
 # Set up Strike webhook
-orange-nethack-cli setup-strike-webhook <webhook_url>
+orange-nethack-cli setup-strike-webhook https://yourdomain.com/api/webhook/payment
 ```
 
 In Docker:
@@ -99,10 +123,11 @@ docker exec -it orange-nethack orange-nethack-cli stats
 | GET | `/` | Web UI (React SPA) |
 | POST | `/api/play` | Start session, get invoice |
 | GET | `/api/session/{id}` | Get session status/credentials |
-| POST | `/api/webhook/strike` | Strike payment webhook |
+| POST | `/api/webhook/payment` | Strike payment webhook |
 | GET | `/api/pot` | Current pot balance |
 | GET | `/api/stats` | Leaderboard and stats |
 | GET | `/api/health` | Health check |
+| WS | `/api/ws/terminal/{id}` | Browser terminal WebSocket |
 
 ## Configuration
 
@@ -182,37 +207,49 @@ python -m orange_nethack.game.monitor
 
 ## Manual Installation (without Docker)
 
-For running directly on a Linux server:
+For running directly on a Linux server, see `deploy/DEPLOYMENT.md` for the full guide.
+
+Quick overview:
 
 ```bash
 # Prerequisites
-apt install nethack-console openssh-server python3.11 python3.11-venv
+apt install nethack-console openssh-server python3.11 python3.11-venv nginx
 
-# Clone and install
+# Clone to /opt
+cd /opt
 git clone https://github.com/yourusername/orange-nethack.git
 cd orange-nethack
-python3.11 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+
+# Run the install script
+sudo ./deploy/install.sh
 
 # Configure
-cp .env.example .env
-# Edit .env with your Strike API key
+sudo nano /opt/orange-nethack/.env
+# Fill in your Strike API key and email settings
 
-# Install shell script
-sudo cp scripts/orange-shell.sh /usr/local/bin/
-sudo chmod +x /usr/local/bin/orange-shell.sh
-echo "/usr/local/bin/orange-shell.sh" | sudo tee -a /etc/shells
+# Start services
+sudo systemctl enable --now orange-nethack-api orange-nethack-monitor
 
-# Nethack xlogfile permissions
+# Set up Strike webhook
+orange-nethack-cli setup-strike-webhook https://yourdomain.com/api/webhook/payment
+```
+
+### Directory Permissions
+
+Critical permissions for the game to work:
+
+```bash
+# Players need to traverse to their game directory
+sudo chown root:games /var/games/nethack
+sudo chmod 755 /var/games/nethack
+
+# Players write game results here
+sudo chown root:games /var/games/nethack/xlogfile
 sudo chmod 664 /var/games/nethack/xlogfile
-sudo chown games:games /var/games/nethack/xlogfile
 
-# Install systemd services
-sudo cp systemd/*.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable orange-nethack-api orange-nethack-monitor
-sudo systemctl start orange-nethack-api orange-nethack-monitor
+# API creates per-user directories here
+sudo chown root:orange-nethack /var/games/nethack/users
+sudo chmod 775 /var/games/nethack/users
 ```
 
 ## Security Notes
