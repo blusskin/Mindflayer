@@ -67,7 +67,10 @@ Players can play via browser instead of SSH client:
 | `src/orange_nethack/cli.py` | Admin CLI commands |
 | `scripts/orange-shell.sh` | Custom SSH shell, session tracking, launches Nethack |
 | `web/src/components/Terminal.tsx` | xterm.js terminal component for browser play |
+| `web/src/components/ConductIcons.tsx` | Conduct badge icons with tooltips |
+| `web/src/components/AchievementIcons.tsx` | Achievement badge icons with tooltips |
 | `web/src/pages/TerminalPage.tsx` | Browser terminal page |
+| `web/src/pages/StatsPage.tsx` | Leaderboard with enhanced game details |
 | `deploy/install.sh` | Bare metal deployment script for Debian 12 |
 | `deploy/DEPLOYMENT.md` | Production deployment guide |
 
@@ -75,7 +78,7 @@ Players can play via browser instead of SSH client:
 
 - `pot` - Single row, tracks pot balance
 - `sessions` - Player sessions (username, password, linux_uid, lightning_address, email, status)
-- `games` - Game results (character_name, death_reason, score, turns, ascended, payout)
+- `games` - Game results (character_name, death_reason, score, turns, ascended, payout, role, race, gender, align, deathlev, hp, maxhp, conduct, achieve)
 
 ## Production Directory Structure
 
@@ -128,6 +131,17 @@ are symlinked from `/usr/lib/games/nethack/`.
 ### UID recycling false positives
 Old xlogfile entries can match new sessions with same UID. Session start time
 tracking in `~/.session_start` prevents this by comparing timestamps.
+
+### Directory permission chain
+Critical permissions for game to work:
+- `/var/games/nethack` - 755 root:games (players need to traverse)
+- `/var/games/nethack/xlogfile` - 664 root:games (players write game results)
+- `/var/games/nethack/users` - 775 root:orange-nethack (API creates user dirs)
+- `/var/lib/orange-nethack` - 770 root:orange-nethack (database)
+- `/opt/orange-nethack/.env` - 640 root:orange-nethack (config with secrets)
+
+### Strike webhook URL
+Must be `/api/webhook/payment` (NOT `/api/webhook/strike`). Wrong URL causes 405 errors.
 
 ## Testing
 
@@ -187,7 +201,7 @@ Email (Mailtrap transactional):
 
 One-time setup for payment notifications:
 ```bash
-orange-nethack-cli setup-strike-webhook https://your-domain.com/api/webhook/strike
+orange-nethack-cli setup-strike-webhook https://your-domain.com/api/webhook/payment
 ```
 
 The webhook receives `invoice.updated` events when payments are received.
@@ -217,5 +231,5 @@ docker-compose up -d
 1. Set `STRIKE_API_KEY` and `MOCK_LIGHTNING=false` in `.env`
 2. Configure email (Mailtrap) settings in `.env`
 3. Set up SSL with certbot
-4. Set up Strike webhook: `orange-nethack-cli setup-strike-webhook https://domain.com/api/webhook/strike`
+4. Set up Strike webhook: `orange-nethack-cli setup-strike-webhook https://domain.com/api/webhook/payment`
 5. Open ports: 22 (SSH), 80 (HTTP), 443 (HTTPS)
