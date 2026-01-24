@@ -54,7 +54,7 @@ export function Layout({ children }: LayoutProps) {
       <footer className="border-t border-dark-border py-8 mt-auto">
         <div className="max-w-6xl mx-auto px-4 text-center">
           <p className="text-gray-500 text-sm">
-            Stack sats. Ascend. Win the pot.
+            Ante up. Ascend. Win the pot.
           </p>
           <p className="text-gray-600 text-xs mt-2">
             Powered by Bitcoin Lightning ⚡

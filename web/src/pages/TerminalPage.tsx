@@ -44,6 +44,10 @@ export function TerminalPage() {
     );
   }
 
+  const handleConnect = () => {
+    setStatus('connected');
+  };
+
   const handleDisconnect = () => {
     setStatus('disconnected');
   };
@@ -121,6 +125,7 @@ export function TerminalPage() {
             ref={terminalRef}
             sessionId={id}
             token={token}
+            onConnect={handleConnect}
             onDisconnect={handleDisconnect}
             onError={handleError}
           />

@@ -114,7 +114,7 @@ export function PlayPage() {
               </label>
               <input
                 type="text"
-                placeholder="you@getalby.com"
+                placeholder="you@cash.app"
                 value={formData.lightning_address}
                 onChange={handleInputChange('lightning_address')}
                 className="input w-full"

@@ -7,6 +7,7 @@ import '@xterm/xterm/css/xterm.css';
 interface TerminalProps {
   sessionId: number;
   token: string;
+  onConnect?: () => void;
   onDisconnect?: () => void;
   onError?: (error: string) => void;
 }
@@ -16,7 +17,7 @@ export interface TerminalHandle {
 }
 
 export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Terminal(
-  { sessionId, token, onDisconnect, onError },
+  { sessionId, token, onConnect, onDisconnect, onError },
   ref
 ) {
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -87,6 +88,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
       // Send initial terminal size
       const { cols, rows } = terminal;
       ws.send(JSON.stringify({ type: 'resize', cols, rows }));
+      onConnect?.();
     };
 
     ws.onmessage = (event) => {
@@ -132,7 +134,7 @@ export const Terminal = forwardRef<TerminalHandle, TerminalProps>(function Termi
       wsRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [sessionId, token, onDisconnect, onError]);
+  }, [sessionId, token, onConnect, onDisconnect, onError]);
 
   useEffect(() => {
     const cleanup = connect();
