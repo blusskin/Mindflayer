@@ -120,7 +120,7 @@ export function PlayPage() {
                 className="input w-full"
               />
               <p className="text-xs text-gray-500 mt-1">
-                Receive the pot if you ascend. Can be set later.
+                Receive the pot here if you ascend.
               </p>
             </div>
 
