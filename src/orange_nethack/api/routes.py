@@ -39,7 +39,7 @@ def generate_password() -> str:
 
 @router.post("/api/play", response_model=InvoiceResponse)
 @limiter.limit("5/minute")  # V7 security fix: Rate limit session creation
-async def create_play_session(request: Request, body: PlayRequest | None = None):
+async def create_play_session(request: Request, body: PlayRequest):
     settings = get_settings()
     db = get_db()
     lightning = get_lightning_client()
@@ -68,19 +68,18 @@ async def create_play_session(request: Request, body: PlayRequest | None = None)
             detail=f"Failed to create Lightning invoice: {str(e)}"
         )
 
-    # Create session in database with optional email
+    # Create session in database with lightning address and optional email
     session_id = await db.create_session(
         username=username,
         password=password,
         payment_hash=invoice.payment_hash,
         ante_sats=settings.ante_sats,
-        email=body.email if body else None,
+        email=body.email,
         access_token=access_token,
     )
 
-    # Set lightning address if provided
-    if body and body.lightning_address:
-        await db.set_lightning_address(session_id, body.lightning_address)
+    # Set lightning address (now required)
+    await db.set_lightning_address(session_id, body.lightning_address)
 
     return InvoiceResponse(
         session_id=session_id,

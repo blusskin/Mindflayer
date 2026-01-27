@@ -4,8 +4,8 @@ export type SessionStatus = 'pending' | 'active' | 'playing' | 'ended';
 
 // Request types
 export interface PlayRequest {
-  lightning_address?: string;
-  email?: string;
+  lightning_address: string; // Required: payout address for winners
+  email?: string; // Optional: for notifications
 }
 
 export interface SetAddressRequest {

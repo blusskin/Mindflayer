@@ -32,14 +32,51 @@ export function PlayPage() {
     setStep('credentials');
   }
 
+  const validateLightningAddress = (address: string): string | null => {
+    if (!address || !address.trim()) {
+      return 'Lightning address is required';
+    }
+
+    const trimmed = address.trim();
+
+    // Check for Lightning address format (user@domain.com)
+    if (trimmed.includes('@')) {
+      const pattern = /^[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!pattern.test(trimmed)) {
+        return 'Invalid Lightning address format (expected: user@domain.com)';
+      }
+    }
+    // Check for LNURL format
+    else if (trimmed.toLowerCase().startsWith('lnurl1')) {
+      if (trimmed.length < 10) {
+        return 'LNURL too short';
+      }
+    }
+    // Invalid format
+    else {
+      return 'Must be Lightning address (user@domain.com) or LNURL (lnurl1...)';
+    }
+
+    return null;
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setError(null);
 
+    // Validate Lightning address
+    const validationError = validateLightningAddress(formData.lightning_address);
+    if (validationError) {
+      setError(validationError);
+      setIsSubmitting(false);
+      return;
+    }
+
     try {
-      const requestData: PlayRequest = {};
-      if (formData.lightning_address) requestData.lightning_address = formData.lightning_address;
+      const requestData: PlayRequest = {
+        lightning_address: formData.lightning_address.trim(),
+      };
       if (formData.email) requestData.email = formData.email;
 
       const result = await api.createSession(requestData);
@@ -110,17 +147,18 @@ export function PlayPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-sm text-gray-400 mb-2">
-                Lightning Address <span className="text-gray-600">(for payout)</span>
+                Lightning Address <span className="text-pixel-red">*</span>
               </label>
               <input
                 type="text"
-                placeholder="you@cash.app"
+                placeholder="you@cash.app or lnurl1..."
                 value={formData.lightning_address}
                 onChange={handleInputChange('lightning_address')}
                 className="input w-full"
+                required
               />
               <p className="text-xs text-gray-500 mt-1">
-                Receive the pot here if you ascend.
+                Receive the pot here if you ascend. Required to play.
               </p>
             </div>
 
