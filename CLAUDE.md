@@ -250,6 +250,25 @@ sudo systemctl enable --now orange-nethack-api orange-nethack-monitor
 The install script handles: system deps, user creation, Python venv, per-user
 Nethack directories, SSH config, systemd services, nginx, and sudo permissions.
 
+### Updating Production Server
+To update the production server to the latest version:
+```bash
+cd /opt/orange-nethack
+sudo ./deploy/update.sh
+```
+
+The update script automatically:
+- Pulls latest changes from git
+- Detects what changed (code, dependencies, config, frontend)
+- Updates Python dependencies if `pyproject.toml` changed
+- Verifies security dependencies (slowapi, email-validator)
+- Rebuilds frontend if `web/` changed
+- Restarts services if needed
+- Runs security verification tests (webhook signatures, rate limiting)
+- Checks for configuration changes and prompts for updates
+
+Always review the output for warnings about configuration changes (e.g., new `.env` variables).
+
 ### Docker (Development/Testing)
 ```bash
 docker-compose up -d
