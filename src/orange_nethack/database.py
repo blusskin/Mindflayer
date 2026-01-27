@@ -135,23 +135,36 @@ class Database:
             return row["balance_sats"] if row else 0
 
     async def add_to_pot(self, amount_sats: int) -> int:
+        """Add amount to pot, return new balance atomically (V4 security fix)."""
         async with self.connection() as db:
-            await db.execute(
-                "UPDATE pot SET balance_sats = balance_sats + ?, updated_at = ? WHERE id = 1",
+            cursor = await db.execute(
+                """
+                UPDATE pot
+                SET balance_sats = balance_sats + ?,
+                    updated_at = ?
+                WHERE id = 1
+                RETURNING balance_sats
+                """,
                 (amount_sats, datetime.now(timezone.utc)),
             )
+            row = await cursor.fetchone()
             await db.commit()
-            return await self.get_pot_balance()
+            return row["balance_sats"] if row else 0
 
     async def drain_pot(self) -> int:
+        """Drain pot, return drained amount atomically (V4 security fix)."""
         async with self.connection() as db:
-            balance = await self.get_pot_balance()
+            # Get old balance and update in single transaction
+            cursor = await db.execute("SELECT balance_sats FROM pot WHERE id = 1")
+            row = await cursor.fetchone()
+            old_balance = row["balance_sats"] if row else 0
+
             await db.execute(
                 "UPDATE pot SET balance_sats = ?, updated_at = ? WHERE id = 1",
                 (get_settings().pot_initial, datetime.now(timezone.utc)),
             )
             await db.commit()
-            return balance
+            return old_balance
 
     async def set_pot_balance(self, amount_sats: int) -> None:
         async with self.connection() as db:
@@ -253,6 +266,27 @@ class Database:
                     (status, session_id),
                 )
             await db.commit()
+
+    async def update_session_status_if_pending(
+        self, session_id: int, new_status: str
+    ) -> bool:
+        """Atomically update status only if pending (V2 security fix).
+
+        Returns True if the update succeeded (was pending), False otherwise.
+        This prevents race conditions in payment confirmation.
+        """
+        async with self.connection() as db:
+            cursor = await db.execute(
+                """
+                UPDATE sessions
+                SET status = ?,
+                    ended_at = CASE WHEN ? = 'ended' THEN ? ELSE ended_at END
+                WHERE id = ? AND status = 'pending'
+                """,
+                (new_status, new_status, datetime.now(timezone.utc), session_id),
+            )
+            await db.commit()
+            return cursor.rowcount > 0
 
     async def set_lightning_address(self, session_id: int, address: str) -> None:
         async with self.connection() as db:

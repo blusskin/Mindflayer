@@ -197,6 +197,34 @@ Email (Mailtrap transactional):
 - `SMTP_FROM_EMAIL` - Must be verified domain in Mailtrap
 - `SMTP_USE_TLS` - `true`
 
+Security:
+- `WEBHOOK_SECRET` - Secret for verifying Strike webhook signatures (set via `setup-strike-webhook`)
+- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins (e.g., `https://example.com,https://www.example.com`)
+
+## Security Features
+
+The codebase includes several security hardening measures:
+
+### Payment Security
+- **Webhook Signature Verification** - All Strike webhooks are verified using HMAC-SHA256 signatures to prevent forged payment confirmations
+- **Payment Race Condition Prevention** - Atomic database operations ensure each payment is processed exactly once, even with concurrent webhook deliveries
+- **Atomic Pot Operations** - Database transactions with RETURNING clause prevent pot balance inconsistencies
+
+### API Security
+- **CORS Restrictions** - Explicit origin whitelist prevents CSRF attacks (configure via `ALLOWED_ORIGINS`)
+- **Rate Limiting** - slowapi middleware protects against API abuse:
+  - Session creation: 5/minute per IP
+  - Payment polling: 30/minute per IP
+  - Webhooks: 100/minute per IP
+  - Stats queries: 60/minute per IP
+- **Constant-Time Token Comparison** - Uses `secrets.compare_digest()` to prevent timing attacks
+- **Authorization Header Support** - Tokens accepted via `Authorization: Bearer <token>` header (query param deprecated)
+
+### Input Validation
+- **Lightning Address Validation** - Pydantic validators ensure proper format before payouts
+- **Email Validation** - EmailStr type validates email addresses
+- **Credentials Not in Email** - SSH credentials not sent in plaintext email; users access via web UI
+
 ## Strike Webhook Setup
 
 One-time setup for payment notifications:

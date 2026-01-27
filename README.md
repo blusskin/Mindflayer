@@ -143,6 +143,8 @@ Environment variables (set in `.env` or docker-compose):
 |----------|---------|-------------|
 | `STRIKE_API_KEY` | (required) | Strike API key for payments |
 | `MOCK_LIGHTNING` | `true` | Use fake payments for testing |
+| `WEBHOOK_SECRET` | (optional) | Secret for verifying Strike webhook signatures |
+| `ALLOWED_ORIGINS` | `http://localhost:5173` | Comma-separated CORS allowed origins |
 | `ANTE_SATS` | `1000` | Cost to play in satoshis |
 | `POT_INITIAL` | `0` | Starting pot balance |
 | `DATABASE_PATH` | `/var/lib/orange-nethack/db.sqlite` | SQLite database path |

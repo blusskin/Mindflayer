@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     # Development settings
     mock_lightning: bool = True  # Use fake Lightning payments for testing
 
+    # CORS settings (V3 security fix)
+    allowed_origins: str = "http://localhost:5173"  # Comma-separated list
+
     # SMTP settings for email notifications
     smtp_host: str | None = None
     smtp_port: int = 587
@@ -69,6 +72,17 @@ class Settings(BaseSettings):
     def smtp_configured(self) -> bool:
         """Check if SMTP is properly configured."""
         return bool(self.smtp_host and self.smtp_from_email)
+
+    @property
+    def cors_origins(self) -> list[str]:
+        """Get CORS allowed origins as a list.
+
+        Parses comma-separated ALLOWED_ORIGINS env var.
+        Example: ALLOWED_ORIGINS="https://example.com,https://www.example.com"
+        """
+        if not self.allowed_origins:
+            return ["http://localhost:5173"]  # Safe default for development
+        return [origin.strip() for origin in self.allowed_origins.split(",")]
 
 
 @lru_cache

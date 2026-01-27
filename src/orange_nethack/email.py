@@ -75,10 +75,8 @@ Play in Browser:
 
         body = f"""Your ante of {ante_sats:,} sats has been received.
 {play_link}
-SSH Credentials:
-  Username: {username}
-  Password: {password}
-  Command:  ssh {username}@{hostname}
+Your session is active. Use the link above to play in your browser,
+or access your SSH credentials via the web interface.
 
 The current pot is {pot_balance:,} sats. Ascend to win it all!
 

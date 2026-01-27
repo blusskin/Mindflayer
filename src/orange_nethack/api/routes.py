@@ -1,8 +1,10 @@
+import logging
 import secrets
 import string
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 
+from orange_nethack.api.limiter import limiter
 from orange_nethack.api.webhooks import confirm_payment
 from orange_nethack.config import get_settings
 from orange_nethack.database import get_db
@@ -19,6 +21,7 @@ from orange_nethack.models import (
     StatsResponse,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -35,6 +38,7 @@ def generate_password() -> str:
 
 
 @router.post("/api/play", response_model=InvoiceResponse)
+@limiter.limit("5/minute")  # V7 security fix: Rate limit session creation
 async def create_play_session(request: Request, body: PlayRequest | None = None):
     settings = get_settings()
     db = get_db()
@@ -104,7 +108,24 @@ async def set_payout_address(session_id: int, body: SetAddressRequest):
 
 
 @router.get("/api/session/{session_id}", response_model=SessionResponse)
-async def get_session(session_id: int, request: Request, token: str | None = None):
+@limiter.limit("30/minute")  # V7 security fix: Rate limit payment status polling
+async def get_session(
+    session_id: int,
+    request: Request,
+    authorization: str | None = Header(None),
+    token: str | None = None,  # Query param - deprecated, for backward compatibility
+):
+    # V8 security fix: Support Authorization header, deprecate query param
+    access_token = None
+    if authorization and authorization.startswith("Bearer "):
+        access_token = authorization[7:]  # Remove "Bearer " prefix
+    elif token:
+        access_token = token
+        logger.warning(
+            f"Token in URL query param (session {session_id}) - "
+            "use Authorization header instead"
+        )
+
     db = get_db()
     lightning = get_lightning_client()
 
@@ -124,7 +145,11 @@ async def get_session(session_id: int, request: Request, token: str | None = Non
 
     # Require valid token for credential access
     if session["status"] in ("active", "playing"):
-        if token != session.get("access_token"):
+        # V6 security fix: Use constant-time comparison to prevent timing attacks
+        if not secrets.compare_digest(
+            access_token or "",
+            session.get("access_token") or ""
+        ):
             raise HTTPException(status_code=403, detail="Invalid or missing access token")
 
     # Only return credentials if session is active
@@ -158,7 +183,8 @@ async def get_pot():
 
 
 @router.get("/api/stats", response_model=StatsResponse)
-async def get_stats():
+@limiter.limit("60/minute")  # V7 security fix: Rate limit stats queries
+async def get_stats(request: Request):
     db = get_db()
 
     pot_balance = await db.get_pot_balance()

@@ -6,9 +6,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from orange_nethack.config import get_settings
 from orange_nethack.database import init_db
+from orange_nethack.api.limiter import limiter
 from orange_nethack.api.routes import router
 from orange_nethack.api.webhooks import webhook_router
 from orange_nethack.api.terminal import terminal_router
@@ -36,12 +39,18 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# V7 security fix: Add rate limiting
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# V3 security fix: Use explicit CORS origins instead of wildcard
+settings = get_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 app.include_router(router)

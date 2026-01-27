@@ -1,8 +1,11 @@
 """Payout service for handling ascension rewards."""
 import logging
 
+from pydantic import ValidationError
+
 from orange_nethack.database import get_db
 from orange_nethack.lightning.strike import get_lightning_client
+from orange_nethack.models import SetAddressRequest
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +33,15 @@ class PayoutService:
             logger.error(f"No lightning address for session {session['id']}")
             return None
 
-        # Get and drain the pot
+        # Validate Lightning address format BEFORE draining pot (V5 security fix)
+        try:
+            validated = SetAddressRequest(lightning_address=lightning_address)
+            lightning_address = validated.lightning_address  # Use validated version
+        except ValidationError as e:
+            logger.error(f"Invalid lightning address for session {session['id']}: {e}")
+            return None
+
+        # Get and drain the pot (only after validation succeeds)
         pot_amount = await db.drain_pot()
         if pot_amount <= 0:
             logger.error("Pot is empty!")

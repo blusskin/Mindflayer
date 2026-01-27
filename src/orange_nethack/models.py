@@ -1,7 +1,8 @@
+import re
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class SessionStatus(str, Enum):
@@ -16,13 +17,41 @@ class PlayRequest(BaseModel):
     lightning_address: str | None = Field(
         None, description="Lightning address for payout on ascension"
     )
-    email: str | None = Field(
+    email: EmailStr | None = Field(  # V9 security fix: Validate email format
         None, description="Email for payment confirmation and game result notifications"
     )
 
 
 class SetAddressRequest(BaseModel):
     lightning_address: str = Field(..., description="Lightning address for payout")
+
+    @field_validator('lightning_address')
+    @classmethod
+    def validate_lightning_address(cls, v: str) -> str:
+        """Validate Lightning address format (V5 security fix).
+
+        Accepts:
+        - Lightning address: user@domain.com
+        - LNURL: lnurl1...
+        """
+        v = v.strip()
+
+        if not v:
+            raise ValueError('Lightning address cannot be empty')
+
+        # Lightning address: user@domain.com
+        if '@' in v:
+            pattern = r'^[a-zA-Z0-9._+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            if not re.match(pattern, v):
+                raise ValueError('Invalid Lightning address format (expected: user@domain.com)')
+        # LNURL: lnurl1...
+        elif v.lower().startswith('lnurl1'):
+            if len(v) < 10:
+                raise ValueError('LNURL too short')
+        else:
+            raise ValueError('Must be Lightning address (user@domain.com) or LNURL (lnurl1...)')
+
+        return v
 
 
 # Response models

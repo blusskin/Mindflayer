@@ -2,6 +2,7 @@
 import asyncio
 import json
 import logging
+import secrets
 from typing import Optional
 
 import asyncssh
@@ -206,8 +207,11 @@ async def websocket_terminal(websocket: WebSocket, session_id: int, token: str |
         await websocket.close(code=4003)
         return
 
-    # Validate access token
-    if session.get("access_token") != token:
+    # Validate access token (V6 security fix: constant-time comparison)
+    if not secrets.compare_digest(
+        session.get("access_token") or "",
+        token or ""
+    ):
         await websocket.send_text(
             "\x1b[31mError: Invalid access token\x1b[0m\r\n"
         )

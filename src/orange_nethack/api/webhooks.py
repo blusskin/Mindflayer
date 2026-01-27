@@ -1,7 +1,11 @@
+import hashlib
+import hmac
+import json
 import logging
 from dataclasses import dataclass
 from fastapi import APIRouter, HTTPException, Request
 
+from orange_nethack.api.limiter import limiter
 from orange_nethack.config import get_settings
 from orange_nethack.database import get_db
 from orange_nethack.email import get_email_service
@@ -64,8 +68,12 @@ async def confirm_payment(
             error="Session not found",
         )
 
-    # Check if already processed
-    if session["status"] != "pending":
+    # Atomically check and update status (V2 security fix - prevents race conditions)
+    was_pending = await db.update_session_status_if_pending(session["id"], "active")
+
+    if not was_pending:
+        # Already processed by another request
+        logger.info(f"Session {session['id']} already processed (status: {session['status']})")
         return PaymentConfirmationResult(
             success=True,
             session_id=session["id"],
@@ -73,6 +81,7 @@ async def confirm_payment(
             already_processed=True,
         )
 
+    # Now safely proceed - only one request gets here
     logger.info(f"Payment confirmed for session {session['id']}, username: {session['username']}")
 
     # Add ante to pot
@@ -93,9 +102,6 @@ async def confirm_payment(
             # Still mark as active - user creation might work on retry or manual intervention
     else:
         logger.info(f"[MOCK] Skipping Linux user creation for: {session['username']}")
-
-    # Update session status
-    await db.update_session_status(session["id"], "active")
 
     # Send payment confirmation email if email provided
     email = session.get("email")
@@ -124,6 +130,7 @@ async def confirm_payment(
 
 
 @webhook_router.post("/payment")
+@limiter.limit("100/minute")  # V7 security fix: Rate limit webhook calls
 async def handle_payment_webhook(request: Request):
     """Handle Strike payment webhook.
 
@@ -140,9 +147,39 @@ async def handle_payment_webhook(request: Request):
         }
     }
     """
-    # Parse webhook payload
+    settings = get_settings()
+
+    # Read body once for both signature verification and JSON parsing
+    body = await request.body()
+
+    # Verify webhook signature (V1 security fix)
+    signature = request.headers.get("Webhook-Signature")
+    if not signature:
+        # Allow missing signature only in mock mode
+        if not settings.mock_lightning:
+            logger.warning("Webhook received without signature (production mode)")
+            raise HTTPException(status_code=401, detail="Missing signature")
+        logger.info("Webhook without signature allowed (mock mode)")
+    else:
+        # Verify signature if webhook_secret is configured
+        if settings.webhook_secret:
+            expected = hmac.new(
+                settings.webhook_secret.encode(),
+                body,
+                hashlib.sha256
+            ).hexdigest()
+
+            if not hmac.compare_digest(signature, expected):
+                logger.error("Invalid webhook signature")
+                raise HTTPException(status_code=401, detail="Invalid signature")
+
+            logger.debug("Webhook signature verified")
+        else:
+            logger.warning("Webhook signature present but no webhook_secret configured")
+
+    # Parse webhook payload from body bytes
     try:
-        payload = await request.json()
+        payload = json.loads(body.decode())
     except Exception as e:
         logger.error(f"Failed to parse webhook payload: {e}")
         raise HTTPException(status_code=400, detail="Invalid JSON payload")
