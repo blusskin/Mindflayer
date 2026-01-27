@@ -140,14 +140,50 @@ PYTHON
         log_fail "Health endpoint not responding correctly"
     fi
 
-    # Test 4: Email validation (V9)
-    log_test "Test 4: Email Validation (V9)"
+    # Test 4: Lightning address validation (V5 - now required)
+    log_test "Test 4: Lightning Address Validation (Required)"
+
+    # Missing lightning address
+    response=$(curl -s -w "%{http_code}" -o /dev/null \
+        -X POST http://localhost:8000/api/play \
+        -H "Content-Type: application/json" \
+        -d '{"email":"test@example.com"}')
+    if [ "$response" == "422" ]; then
+        log_pass "Missing Lightning address rejected (HTTP 422)"
+    else
+        log_fail "Missing Lightning address not rejected (got HTTP $response)"
+    fi
+
+    # Invalid lightning address format
+    response=$(curl -s -w "%{http_code}" -o /dev/null \
+        -X POST http://localhost:8000/api/play \
+        -H "Content-Type: application/json" \
+        -d '{"lightning_address":"invalid"}')
+    if [ "$response" == "422" ]; then
+        log_pass "Invalid Lightning address rejected (HTTP 422)"
+    else
+        log_fail "Invalid Lightning address not rejected (got HTTP $response)"
+    fi
+
+    # Valid lightning address
+    response=$(curl -s -w "%{http_code}" -o /dev/null \
+        -X POST http://localhost:8000/api/play \
+        -H "Content-Type: application/json" \
+        -d '{"lightning_address":"user@getalby.com"}')
+    if [ "$response" == "200" ] || [ "$response" == "201" ]; then
+        log_pass "Valid Lightning address accepted (HTTP $response)"
+    else
+        log_fail "Valid Lightning address not accepted (got HTTP $response)"
+    fi
+
+    # Test 5: Email validation (V9)
+    log_test "Test 5: Email Validation (V9)"
 
     # Invalid email
     response=$(curl -s -w "%{http_code}" -o /dev/null \
         -X POST http://localhost:8000/api/play \
         -H "Content-Type: application/json" \
-        -d '{"email":"invalid-email"}')
+        -d '{"lightning_address":"test@example.com","email":"invalid-email"}')
     if [ "$response" == "422" ]; then
         log_pass "Invalid email rejected (HTTP 422)"
     else
@@ -158,50 +194,50 @@ PYTHON
     response=$(curl -s -w "%{http_code}" -o /dev/null \
         -X POST http://localhost:8000/api/play \
         -H "Content-Type: application/json" \
-        -d '{"email":"valid@example.com"}')
+        -d '{"lightning_address":"test@example.com","email":"valid@example.com"}')
     if [ "$response" == "200" ] || [ "$response" == "201" ]; then
         log_pass "Valid email accepted (HTTP $response)"
     else
         log_fail "Valid email not accepted (got HTTP $response)"
     fi
 
-    # Test 5: Lightning address validation (V5)
-    log_test "Test 5: Lightning Address Validation (V5)"
+    # Test 6: Lightning address update endpoint (V5)
+    log_test "Test 6: Lightning Address Update Endpoint (V5)"
 
-    # Create session
+    # Create session with valid address
     session_response=$(curl -s -X POST http://localhost:8000/api/play \
         -H "Content-Type: application/json" \
-        -d '{}')
+        -d '{"lightning_address":"initial@example.com"}')
     session_id=$(echo "$session_response" | python3 -c "import sys, json; print(json.load(sys.stdin)['session_id'])" 2>/dev/null || echo "")
 
     if [ -n "$session_id" ]; then
-        # Invalid address
+        # Invalid address update
         response=$(curl -s -w "%{http_code}" -o /dev/null \
             -X POST http://localhost:8000/api/play/$session_id/address \
             -H "Content-Type: application/json" \
             -d '{"lightning_address":"invalid"}')
         if [ "$response" == "422" ]; then
-            log_pass "Invalid Lightning address rejected (HTTP 422)"
+            log_pass "Invalid Lightning address update rejected (HTTP 422)"
         else
-            log_fail "Invalid Lightning address not rejected (got HTTP $response)"
+            log_fail "Invalid Lightning address update not rejected (got HTTP $response)"
         fi
 
-        # Valid address
+        # Valid address update
         response=$(curl -s -w "%{http_code}" -o /dev/null \
             -X POST http://localhost:8000/api/play/$session_id/address \
             -H "Content-Type: application/json" \
             -d '{"lightning_address":"user@getalby.com"}')
         if [ "$response" == "200" ]; then
-            log_pass "Valid Lightning address accepted (HTTP 200)"
+            log_pass "Valid Lightning address update accepted (HTTP 200)"
         else
-            log_fail "Valid Lightning address not accepted (got HTTP $response)"
+            log_fail "Valid Lightning address update not accepted (got HTTP $response)"
         fi
     else
-        log_fail "Failed to create session for address test"
+        log_fail "Failed to create session for address update test"
     fi
 
-    # Test 6: Rate limiting (V7)
-    log_test "Test 6: Rate Limiting (V7)"
+    # Test 7: Rate limiting (V7)
+    log_test "Test 7: Rate Limiting (V7)"
     log_info "Making 6 requests (limit is 5/minute)..."
 
     rate_limit_hit=false
@@ -209,7 +245,7 @@ PYTHON
         response=$(curl -s -w "%{http_code}" -o /dev/null \
             -X POST http://localhost:8000/api/play \
             -H "Content-Type: application/json" \
-            -d '{}')
+            -d '{"lightning_address":"test@example.com"}')
 
         if [ "$response" == "429" ]; then
             rate_limit_hit=true
@@ -225,8 +261,8 @@ PYTHON
     log_info "Waiting 60 seconds for rate limit reset..."
     sleep 60
 
-    # Test 7: Webhook signature (V1)
-    log_test "Test 7: Webhook Signature Verification (V1)"
+    # Test 8: Webhook signature (V1)
+    log_test "Test 8: Webhook Signature Verification (V1)"
 
     # Note: In mock mode, signature may not be enforced
     response=$(curl -s -w "%{http_code}" -o /dev/null \
@@ -241,8 +277,8 @@ PYTHON
         log_fail "Unexpected webhook response (HTTP $response)"
     fi
 
-    # Test 8: CORS configuration (V3)
-    log_test "Test 8: CORS Configuration (V3)"
+    # Test 9: CORS configuration (V3)
+    log_test "Test 9: CORS Configuration (V3)"
 
     response=$(curl -s -I -H "Origin: http://localhost:5173" \
         http://localhost:8000/api/stats 2>&1)
@@ -253,8 +289,8 @@ PYTHON
         log_fail "CORS headers not found"
     fi
 
-    # Test 9: Configuration check
-    log_test "Test 9: Configuration Check"
+    # Test 10: Configuration check
+    log_test "Test 10: Configuration Check"
 
     config=$(docker-compose exec -T orange-nethack bash -c "
 source .venv/bin/activate 2>/dev/null || true
@@ -278,8 +314,8 @@ PYTHON
         log_info "Webhook secret not configured (ok for testing)"
     fi
 
-    # Test 10: CLI commands
-    log_test "Test 10: CLI Commands"
+    # Test 11: CLI commands
+    log_test "Test 11: CLI Commands"
 
     result=$(docker-compose exec -T orange-nethack bash -c "
 source .venv/bin/activate 2>/dev/null || true

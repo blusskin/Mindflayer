@@ -180,7 +180,7 @@ if echo "$CHANGES" | grep -qE "webhooks.py|database.py|models.py|main.py|limiter
         response=$(curl -s -o /dev/null -w "%{http_code}" \
             -X POST http://localhost:8000/api/play \
             -H "Content-Type: application/json" \
-            -d '{}' 2>/dev/null)
+            -d '{"lightning_address":"test@example.com"}' 2>/dev/null)
 
         if [ "$response" == "429" ]; then
             log "  ✓ Rate limiting active (blocked on request $i)"
