@@ -32,11 +32,13 @@ To prevent players from reconnecting after death (before cleanup):
 - If found, blocks reconnection with "game already ended" message
 
 ### Payment Flow
-1. Player submits Lightning address + email via web UI
-2. Strike API creates invoice, returned to player
-3. Payment detected via webhook OR polling (GET `/api/session/{id}`)
-4. `confirm_payment()` creates Linux user, sends email with SSH creds
-5. Player SSHs in, custom shell (`orange-shell.sh`) launches Nethack
+1. Player submits **Lightning address (required)** + email (optional) via web UI
+2. Lightning address is validated (format: `user@domain.com` or `lnurl1...`)
+3. Strike API creates invoice, returned to player
+4. Payment detected via webhook (with HMAC-SHA256 signature verification) OR polling (GET `/api/session/{id}`)
+5. `confirm_payment()` atomically processes payment, creates Linux user, sends email notification
+6. Player accesses credentials via web UI, connects via browser terminal or SSH
+7. Custom shell (`orange-shell.sh`) launches Nethack
 
 ### Game End Flow
 1. `GameMonitor` watches xlogfile for new entries
@@ -52,20 +54,31 @@ Players can play via browser instead of SSH client:
 - xterm.js on frontend renders terminal
 - Disconnect sends SIGHUP for Nethack emergency save
 
+### Lightning Address Support
+Lightning address is **required** at session creation (no longer optional):
+- Format: `user@domain.com` (Lightning address) OR `lnurl1...` (LNURL)
+- Validated on frontend and backend using Pydantic field validators
+- Strike API endpoint `/payment-quotes/lightning/lnurl` handles both formats
+- Validation prevents invalid addresses before pot is drained on payout
+- Players cannot create a session without providing a valid payout address
+
 ## Important Files
 
 | File | Purpose |
 |------|---------|
-| `src/orange_nethack/api/routes.py` | API endpoints, session creation |
-| `src/orange_nethack/api/webhooks.py` | `confirm_payment()` - creates user on payment |
+| `src/orange_nethack/api/routes.py` | API endpoints, session creation, rate limiting |
+| `src/orange_nethack/api/webhooks.py` | `confirm_payment()` with signature verification, atomic payment processing |
+| `src/orange_nethack/api/limiter.py` | Rate limiter configuration (slowapi) |
 | `src/orange_nethack/api/terminal.py` | WebSocket SSH bridge for browser terminal |
+| `src/orange_nethack/models.py` | Pydantic models with Lightning address and email validation |
 | `src/orange_nethack/game/monitor.py` | Watches xlogfile, handles game end |
-| `src/orange_nethack/game/payout.py` | Sends pot to winner via Strike |
+| `src/orange_nethack/game/payout.py` | Sends pot to winner via Strike (validates address before draining pot) |
 | `src/orange_nethack/lightning/strike.py` | Strike API client (invoices, LNURL payments) |
-| `src/orange_nethack/database.py` | SQLite DB, session/game/pot operations |
+| `src/orange_nethack/database.py` | SQLite DB with atomic operations (RETURNING clause) |
 | `src/orange_nethack/users/manager.py` | Linux user creation/deletion, per-user directories |
-| `src/orange_nethack/cli.py` | Admin CLI commands |
+| `src/orange_nethack/cli.py` | Admin CLI commands (includes webhook secret generation) |
 | `scripts/orange-shell.sh` | Custom SSH shell, session tracking, launches Nethack |
+| `deploy/update.sh` | Production update script with security verification |
 | `web/src/components/Terminal.tsx` | xterm.js terminal component for browser play |
 | `web/src/components/ConductIcons.tsx` | Conduct badge icons with tooltips |
 | `web/src/components/AchievementIcons.tsx` | Achievement badge icons with tooltips |
@@ -142,6 +155,24 @@ Critical permissions for game to work:
 
 ### Strike webhook URL
 Must be `/api/webhook/payment` (NOT `/api/webhook/strike`). Wrong URL causes 405 errors.
+
+### Lightning address validation
+Lightning address is required at session creation. Test scripts must include valid Lightning addresses:
+```bash
+# Correct - includes Lightning address
+curl -X POST http://localhost:8000/api/play \
+  -H "Content-Type: application/json" \
+  -d '{"lightning_address":"test@example.com"}'
+
+# Wrong - missing required field, returns HTTP 422
+curl -X POST http://localhost:8000/api/play \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+Accepted formats:
+- Lightning address: `user@domain.com` (or with `+` tags: `user+tag@domain.com`)
+- LNURL: `lnurl1...` (minimum 10 characters)
 
 ## Testing
 
@@ -232,7 +263,15 @@ One-time setup for payment notifications:
 orange-nethack-cli setup-strike-webhook https://your-domain.com/api/webhook/payment
 ```
 
-The webhook receives `invoice.updated` events when payments are received.
+This command:
+1. Registers the webhook subscription with Strike API
+2. Generates a secure webhook secret using `secrets.token_hex(32)`
+3. Saves the secret to `.env` file as `WEBHOOK_SECRET`
+4. Prints confirmation and restart instructions
+
+The webhook receives `invoice.updated` events when payments are received. All webhooks are verified using HMAC-SHA256 signatures to prevent forged payments.
+
+**Note:** In production, the `.env` file is owned by root, so the command must be run with appropriate permissions.
 
 ## Deployment
 

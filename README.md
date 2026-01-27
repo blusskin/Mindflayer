@@ -4,14 +4,14 @@ Bitcoin-themed Nethack server where players pay a Lightning ante to play, with t
 
 ## How It Works
 
-1. Player visits the web UI and submits their Lightning address + email
+1. Player visits the web UI and submits their **Lightning address** (required) and email (optional)
 2. Server returns a Lightning invoice for the ante (default: 1000 sats)
-3. Upon payment, SSH credentials are created and emailed to the player
-4. Player SSHs in, enters their character name, and plays Nethack
+3. Upon payment, SSH credentials are created and available via the web UI
+4. Player connects via browser terminal or SSH, enters their character name, and plays Nethack
 5. If the player ascends, they win the entire pot!
 6. If they die, their ante is added to the pot for the next player
 
-The pot starts at 0 and is purely player-funded.
+The pot starts at 0 and is purely player-funded. Lightning addresses can be in the format `user@domain.com` or LNURL (`lnurl1...`).
 
 ## Features
 
@@ -22,6 +22,21 @@ The pot starts at 0 and is purely player-funded.
 - **Conduct tracking** - displays badges for pacifist, vegan, wishless, and other conducts
 - **Email notifications** - payment confirmation and game results
 - **Anti-cheat** - explore/wizard mode games are detected and don't count
+- **Security hardened** - webhook signatures, race condition prevention, rate limiting, input validation
+
+## Security
+
+Orange Nethack includes production-grade security features:
+
+- **Webhook Signature Verification** - HMAC-SHA256 signatures prevent forged payment confirmations
+- **Payment Race Condition Prevention** - Atomic database operations ensure each payment processes exactly once
+- **CORS Restrictions** - Explicit origin whitelist prevents CSRF attacks
+- **Rate Limiting** - API abuse protection (5 sessions/min, 30 polls/min, 100 webhooks/min)
+- **Input Validation** - Lightning addresses and emails validated before processing
+- **Constant-Time Token Comparison** - Prevents timing attacks on access tokens
+- **Atomic Pot Operations** - Database transactions prevent balance inconsistencies
+
+See `SECURITY.md` for detailed security documentation.
 
 ## Quick Start (Docker)
 
@@ -59,6 +74,11 @@ The server will be available at `http://localhost:8000` with:
 ```bash
 docker exec -it orange-nethack orange-nethack-cli setup-strike-webhook https://your-domain.com/api/webhook/payment
 ```
+
+This command will:
+- Register the webhook with Strike
+- Generate and save a webhook secret to `.env`
+- Display instructions to restart services
 
 **Note:** The webhook URL must be `/api/webhook/payment` (not `/api/webhook/strike`).
 
@@ -241,6 +261,27 @@ sudo systemctl enable --now orange-nethack-api orange-nethack-monitor
 # Set up Strike webhook
 orange-nethack-cli setup-strike-webhook https://yourdomain.com/api/webhook/payment
 ```
+
+## Updating Production
+
+To update your production server to the latest version:
+
+```bash
+cd /opt/orange-nethack
+sudo ./deploy/update.sh
+```
+
+The update script automatically:
+- Pulls latest changes from git
+- Detects what changed (code, dependencies, config, frontend)
+- Updates Python dependencies if needed
+- Verifies security dependencies are installed
+- Rebuilds frontend if web files changed
+- Restarts services if code changed
+- Runs security verification tests
+- Warns about configuration changes
+
+Always review the output for warnings about new `.env` variables or configuration changes.
 
 ### Directory Permissions
 
