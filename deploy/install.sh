@@ -196,8 +196,8 @@ NETHACK_USER_PREFIX=nh_
 NETHACK_GROUP=games
 MAX_ACTIVE_SESSIONS=100
 EOF
-    chown root:"$APP_USER" "$ENV_FILE"
-    chmod 640 "$ENV_FILE"
+    chown "$APP_USER":"$APP_USER" "$ENV_FILE"
+    chmod 600 "$ENV_FILE"
     warn "Created $ENV_FILE - YOU MUST EDIT THIS FILE with your production values!"
 fi
 

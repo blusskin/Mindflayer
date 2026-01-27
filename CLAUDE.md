@@ -151,7 +151,7 @@ Critical permissions for game to work:
 - `/var/games/nethack/xlogfile` - 664 root:games (players write game results)
 - `/var/games/nethack/users` - 775 root:orange-nethack (API creates user dirs)
 - `/var/lib/orange-nethack` - 770 root:orange-nethack (database)
-- `/opt/orange-nethack/.env` - 640 root:orange-nethack (config with secrets)
+- `/opt/orange-nethack/.env` - 600 orange-nethack:orange-nethack (config with secrets, writable by CLI)
 
 ### Strike webhook URL
 Must be `/api/webhook/payment` (NOT `/api/webhook/strike`). Wrong URL causes 405 errors.
@@ -271,7 +271,7 @@ This command:
 
 The webhook receives `invoice.updated` events when payments are received. All webhooks are verified using HMAC-SHA256 signatures to prevent forged payments.
 
-**Note:** In production, the `.env` file is owned by root, so the command must be run with appropriate permissions.
+**Note:** The `.env` file is owned by the `orange-nethack` user (600 permissions), allowing CLI commands to update it directly without sudo.
 
 ## Deployment
 
