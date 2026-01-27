@@ -18,7 +18,7 @@ from datetime import datetime
 from pathlib import Path
 
 from orange_nethack.api.webhooks import confirm_payment
-from orange_nethack.config import get_settings
+from orange_nethack.config import get_settings, _get_env_file
 from orange_nethack.database import Database, get_db, init_db
 from orange_nethack.game.monitor import GameMonitor
 from orange_nethack.game.xlogfile import XlogfileWatcher
@@ -570,6 +570,49 @@ async def cmd_setup_strike_webhook(webhook_url: str) -> int:
         print()
         print("Webhook subscription created successfully!")
         print("Strike will now send invoice.updated events to your webhook URL.")
+
+        # Generate and save webhook secret to .env file
+        print()
+        print("Generating webhook secret...")
+        webhook_secret = secrets.token_hex(32)
+
+        env_file = _get_env_file()
+        if not env_file:
+            print("Warning: Could not find .env file to save webhook secret.")
+            print(f"Please manually add to your .env file:")
+            print(f"  WEBHOOK_SECRET={webhook_secret}")
+            return 0
+
+        # Read existing .env content
+        try:
+            env_content = env_file.read_text()
+            lines = env_content.split('\n')
+
+            # Update or add WEBHOOK_SECRET
+            secret_found = False
+            for i, line in enumerate(lines):
+                if line.startswith('WEBHOOK_SECRET='):
+                    lines[i] = f'WEBHOOK_SECRET={webhook_secret}'
+                    secret_found = True
+                    break
+
+            if not secret_found:
+                # Add WEBHOOK_SECRET after the security settings section
+                lines.append(f'WEBHOOK_SECRET={webhook_secret}')
+
+            # Write back to .env
+            env_file.write_text('\n'.join(lines))
+
+            print(f"  Webhook secret saved to: {env_file}")
+            print()
+            print("IMPORTANT: Restart your services for the webhook secret to take effect:")
+            print("  sudo systemctl restart orange-nethack-api orange-nethack-monitor")
+
+        except Exception as e:
+            print(f"Warning: Failed to save webhook secret to .env: {e}")
+            print(f"Please manually add to {env_file}:")
+            print(f"  WEBHOOK_SECRET={webhook_secret}")
+
         return 0
     except Exception as e:
         print(f"Error: Failed to create webhook subscription: {e}")
